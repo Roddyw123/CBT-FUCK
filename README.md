@@ -1,2 +1,4 @@
 # CBT-FUCK
-Designed to translate between low-level C and the Brainfuck esoteric language, with a modular architecture intended for future language support.
+CBT is a hobbyist bidirectional C ↔ Brainfuck transpiler built with a focus on simplicity, correctness, and extensibility.
+
+Motivated by unfamiliar compilation targets and deliberately hostile semantics, this project is far from practical, and is instead defined by a pursuit of challenge, experimentation, and understanding how far low-level translation can be pushed.
