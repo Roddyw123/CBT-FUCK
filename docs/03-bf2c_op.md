@@ -6,13 +6,54 @@ This document describes the optimization passes applied during compilation, thei
 
 Here is a table of contents for all of the current optimizations:
 
-**TBD**
-
-
+1. [Instruction Coalescing and Cancellation](#instruction-coalescing-and-cancellation)
+2. [Zero Loops](#zero-loops)
+3. [Scan Loops](#scan-loops)
+4. [Multiplication Loops](#multiplication-loops)
+5. [Offset Optimization](#offset-optimization)
+6. [Multi-Cell I/O Optimization](#multi-cell-io-optimization)
 ## Intermediate Representation
 
-Below is the IR that we have decided on:
-**TBD**
+Below is the IR that we have decided on, in Backus-Naur Form:
+
+```
+Prog ::= Stmt*
+
+Stmt ::= Add(delta: i32)
+       | Move(distance: i32)
+       | Output(delta: i32)
+       | Input(delta: i32)
+       | Input
+       | Loop(body: Prog)
+       | ZeroLoop
+       | ScanLoop(direction: i32)
+       | MultiplicationLoop(decrement: u8, effects: (offset: i32, factor: i32)*)
+```
+
+### IR Node Semantics
+
+- **Add(delta)**: Add `delta` to the current cell (delta can be negative for subtraction). Result of coalescing consecutive `+` and `-` operations.
+
+- **Move(distance)**: Move the data pointer by `distance` positions (distance can be negative for leftward movement). Result of coalescing consecutive `>` and `<` operations.
+
+- **Output(delta)**: Output the value of the current cell `delta` times. Result of coalescing `delta` consecutive `.` operations.
+
+- **Input(delta)**: Read `delta` bytes from input, storing only the final byte in the current cell. Result of coalescing `delta` consecutive `,` operations. The first `delta-1` bytes are consumed from stdin but discarded.
+
+- **Input**: Read a single byte from input into the current cell (corresponds to `,` in Brainfuck). Used when no coalescing occurs.
+
+- **Loop(body)**: Execute the program `body` repeatedly while the current cell is non-zero. Represents a general `[...]` loop that hasn't been optimized into a more specific form.
+
+- **ZeroLoop**: Set the current cell to zero in O(1) time. Recognized from patterns `[-]` or `[+]`.
+
+- **ScanLoop(direction)**: Move the pointer in the given direction until reaching a zero cell. `direction` is +1 for right scan `[>]`, -1 for left scan `[<]`. More generally, `direction` indicates the amount to move per iteration (though typically ±1).
+
+- **MultiplicationLoop(decrement, effects)**: An optimized linear loop that:
+  - Decrements the current cell by `decrement` per iteration (where `decrement` is odd to guarantee termination)
+  - Applies scaled changes to cells at various offsets
+  - `effects` is a list of `(offset, factor)` pairs, where each pair means "add `factor * (initial_value / decrement)` to the cell at `offset`"
+  - Executes in O(1) time instead of O(n) 
+
 
 ---
 
@@ -21,6 +62,7 @@ Below is the IR that we have decided on:
 The simplest optimizations performed by CBT-FUCK are **instruction coalescing** and **cancellation**. These operate on maximal consecutive runs of Brainfuck instructions drawn from either:
 - The **arithmetic set**: `{+, -}`
 - The **pointer-movement set**: `{>, <}`
+- The **I/O set**: `{., ,}`
 
 ### Algorithm
 
@@ -34,13 +76,21 @@ For each maximal run of instructions from the same set, the compiler computes th
 - `>` contributes +1 to the data pointer position
 - `<` contributes -1 to the data pointer position
 
+**I/O runs:**
+- `.` outputs the current cell value once
+- `,` reads one byte from input, storing it in the current cell
+
+Note: Multiple consecutive `,` operations each overwrite the cell, so only the final input value remains. However, all bytes must still be consumed from the input stream (side effect).
+
 ### Transformation
 
 The entire run is replaced with a single combined operation:
 - **Add(k)**: net arithmetic effect of k
 - **Move(n)**: net pointer movement of n
+- **Input(n)**: net inputs of n
+- **Output(n)**: net outputs of n
 
-If the net effect is zero, the run is **removed entirely** (cancellation).
+If the net effect is zero, the run is **removed entirely** (cancellation). Note: This only applies to arithmetic and pointer-movement operations; I/O operations are never cancelled due to their observable side effects.
 
 ### Examples
 
@@ -49,11 +99,87 @@ If the net effect is zero, the run is **removed entirely** (cancellation).
 >><>>      →  Move(3)
 ><><       →  (deleted)
 --+++--    →  Add(-1)
+.....      →  Output(5)
+,,,        →  Input(3)
 ```
 
 ### Correctness
 
-This optimization is trivially correct because addition and pointer arithmetic are both associative and commutative operations. The final state is identical whether operations are applied individually or as an aggregate.
+**For arithmetic and pointer movement:**
+
+This optimization is trivially correct because addition and pointer arithmetic are both associative and commutative operations over ℤ/256ℤ and ℤ respectively. The final state is identical whether operations are applied individually or as an aggregate:
+
+```
+(+1) + (+1) + (-1) + (+1) = +2
+(>1) + (>1) + (<1) + (>1) + (>1) = >3
+```
+
+**For I/O operations:**
+
+I/O coalescing requires more careful analysis due to side effects:
+
+1. **Output operations (`.`)**:
+   Multiple consecutive outputs can be coalesced because each operation independently writes the current cell value to the output stream. Outputting the value n times sequentially is equivalent to a loop that outputs n times:
+   ```c
+   // Original: . . . . .
+   putchar(*ptr); putchar(*ptr); putchar(*ptr); putchar(*ptr); putchar(*ptr);
+
+   // Coalesced: Output(5)
+   for (int i = 0; i < 5; i++) putchar(*ptr);
+
+   // Further optimization for large n: buffered write
+   // (Only beneficial when n is large enough to amortize overhead)
+   if (n > 8) {  // Threshold determined empirically
+       char buf[n];  // VLA for moderate n, or heap allocation for very large n
+       memset(buf, *ptr, n);
+       fwrite(buf, 1, n, stdout);
+   } else {
+       for (int i = 0; i < n; i++) putchar(*ptr);
+   }
+   ```
+   Both produce identical output: the same cell value written to stdout exactly 5 times. ✓
+
+   **Note:** The buffering optimization reduces function call overhead but may not improve performance for small n due to setup cost. Additionally, `putchar` is already buffered by the C standard library, so this optimization primarily benefits scenarios with very large n or when fine-grained control over system calls is needed.
+
+2. **Input operations (`,`)**:
+   Multiple consecutive inputs can be coalesced with the understanding that:
+   - Each `,` reads one byte from stdin (consumes from input stream)
+   - Each `,` overwrites the current cell with the newly read value
+   - Only the last value written remains in the cell
+
+   For n consecutive input operations, the semantics are:
+   ```c
+   // Original: , , ,
+   *ptr = getchar(); *ptr = getchar(); *ptr = getchar();
+
+   // Coalesced: Input(3) - basic loop
+   for (int i = 0; i < 3; i++) *ptr = getchar();
+
+   // Optimized: Input(3) - explicit discard + final read
+   for (int i = 1; i < 3; i++) getchar();  // Discard first n-1 bytes
+   *ptr = getchar();  // Keep the nth byte
+
+   // Alternative for small compile-time known n: fully unroll
+   getchar(); getchar(); *ptr = getchar();
+   ```
+   All variants consume exactly 3 bytes from the input stream, and the cell contains the 3rd byte read. The first two bytes are discarded (overwritten), but the critical side effect—consuming bytes from stdin—is preserved. ✓
+
+   The optimized version saves n-1 assignment operations and makes the intent clearer. For small known n (e.g., n ≤ 4), full loop unrolling eliminates loop overhead entirely.
+
+   **Important:** We cannot optimize this to a single `*ptr = getchar()` even though only the final byte is stored. We must consume all n bytes from stdin, otherwise subsequent input operations would read the wrong bytes.
+
+   **Example:** With input stream `ABC`:
+   - `,,,` consumes A, B, C (stores C)
+   - A single `,` consumes only A (stores A)
+   - These produce different program states! The next `,` would read D in the first case, but B in the second.
+
+**Cancellation:**
+
+For arithmetic and pointer movement, if the net effect is zero, the entire run can be safely removed. However, **I/O operations cannot be cancelled** even if they appear redundant, because:
+- Output operations have observable side effects (writing to stdout)
+- Input operations have side effects (consuming from stdin)
+
+Therefore, `Output(n)` and `Input(n)` are only generated for n ≥ 1, never removed by cancellation.
 
 ---
 
@@ -153,9 +279,6 @@ while (*ptr) ptr++;
 ```c
 while (*ptr) ptr--;
 ```
-
-### Scan Loops with Strides
-**TBD**
 
 ### Performance Impact
 
@@ -436,6 +559,7 @@ This is one of the most impactful optimizations in the CBT-FUCK compiler, transf
 ---
 
 ## Offset Optimization
+It is recommended that you read how instruction coalescing and cancellation work before reading this section.
 
 **Offset optimization** eliminates redundant pointer movements by using direct offset addressing instead of physically moving the pointer and then moving it back.
 
@@ -477,6 +601,10 @@ We can write:
 ```c
 ptr[1] += 3;  // Access offset 1 directly
 ```
+
+We may also use offset optimization on I/O operations:
+
+```c 
 
 ### Recognition Conditions
 
@@ -531,6 +659,21 @@ while (*ptr) { ... }
 
 The physical pointer must be correct before loops because the loop condition tests `*ptr`, not `ptr[offset]`.
 
+**Example 4: Flush before I/O**
+
+```bf
+>+++.  # Move right, add 3, then output
+```
+
+Generates:
+```c
+ptr[1] += 3;
+ptr++;        // Must flush before I/O
+putchar(*ptr);
+```
+
+I/O operations require the physical pointer to be at the correct position because they read/write `*ptr` at the current location.
+
 ### Correctness
 
 **Claim:** Offset optimization preserves program semantics.
@@ -561,28 +704,3 @@ For `>+>++>+++<<<` repeated 1000 times:
 - **Speedup:** ~1.5-2× depending on architecture
 
 ---
-
-## Constant Propagation
-**TBD**
-
-
-## Dead Code Elimination
-**TBD**
-
-
-## Conditional Replacement
-**TBD**
-
-
-## I/O Coalescing
-**TBD**
-
-
-## Strength Reduction
-**TBD**
-
-## Nested Loop Detection
-**TBD**
-
-## JIT Compilation
-**TBD**
