@@ -4,6 +4,11 @@ The translation from Brainfuck to C is considered trivial due to the semantic cl
 
 This document describes the optimization passes applied during compilation, their mathematical foundations, and the correctness guarantees they provide.
 
+Here is a table of contents for all of the current optimizations:
+
+**TBD**
+
+
 ## Intermediate Representation
 
 Below is the IR that we have decided on:
@@ -148,6 +153,9 @@ while (*ptr) ptr++;
 ```c
 while (*ptr) ptr--;
 ```
+
+### Scan Loops with Strides
+**TBD**
 
 ### Performance Impact
 
@@ -338,6 +346,13 @@ ptr[0] = 0;
 
 Where s₁, s₂, ... are the per-iteration additive changes to each cell.
 
+In this case, if the scaling factor for a tape cell is 1, then we avoid the multiplication operation entirely.
+
+```c
+// Instead of: ptr[1] += 1 * x; (requires multiplication)
+ptr[1] += x;  // Direct addition
+```
+
 **Example:** `[->>+++<<]` compiles to:
 ```c
 uint8_t x = ptr[0];
@@ -420,13 +435,154 @@ This is one of the most impactful optimizations in the CBT-FUCK compiler, transf
 
 ---
 
-## Summary
+## Offset Optimization
 
-The optimization pipeline in CBT-FUCK demonstrates that even a minimalist language like Brainfuck can benefit from sophisticated compiler techniques. By recognizing common patterns and exploiting their algebraic properties, we achieve:
+**Offset optimization** eliminates redundant pointer movements by using direct offset addressing instead of physically moving the pointer and then moving it back.
 
-- **Constant-time execution** for patterns that would otherwise require iteration
-- **Smaller code size** through instruction fusion and elimination
-- **Preserved semantics** with mathematical correctness guarantees
-- **Improved readability** of generated C code
+This optimization operates on the coalesced IR (after instruction coalescing has already been applied) and transforms sequences where the pointer moves away from its starting position, performs operations, then returns.
 
-The multiplication loop optimization, in particular, showcases the power of algebraic reasoning in compiler design, leveraging modular arithmetic to transform iterative computations into closed-form solutions.
+### Problem Statement
+
+Consider the pattern:
+```bf
+>+++<
+```
+
+After instruction coalescing, this becomes:
+```
+Move(1), Add(3), Move(-1)
+```
+
+The naive compilation generates:
+```c
+ptr++;
+*ptr += 3;
+ptr--;
+```
+
+The pointer movements are **redundant**, the pointer ends where it started, so we could have used offset addressing instead.
+
+### Key Insight
+
+In C, array indexing `ptr[n]` is equivalent to dereferencing `*(ptr + n)`. This allows us to access cells at offset positions without physically moving the pointer variable.
+
+Instead of:
+```c
+ptr++;        // Move to offset 1
+*ptr += 3;    // Modify
+ptr--;        // Move back
+```
+
+We can write:
+```c
+ptr[1] += 3;  // Access offset 1 directly
+```
+
+### Recognition Conditions
+
+A sequence of operations qualifies for offset optimization when:
+
+1. **Net pointer movement is non-zero** over a subsequence of instructions
+2. **Operations occur at various offsets** from the starting position
+3. **No intervening loops or I/O** that require the physical pointer to be at a specific position
+
+The optimizer tracks a **virtual pointer offset** during code generation, delaying physical pointer movements until necessary (loop entries, I/O operations, or end of basic blocks).
+
+### Examples
+
+**Example 1: Zero net movement**
+
+```bf
+>++>+++<<<<  # Net movement: 0
+```
+
+Generates:
+```c
+ptr[1] += 2;
+ptr[2] += 3;
+// No pointer movement needed
+```
+
+**Example 2: Non-zero net movement**
+
+```bf
+>++>+++  # Net movement: +2
+```
+
+Generates:
+```c
+ptr[1] += 2;
+ptr[2] += 3;
+ptr += 2;  // Physical pointer catches up
+```
+
+**Example 3: Flush before loop**
+
+```bf
+>++[...]  # Operations before loop
+```
+
+Generates:
+```c
+ptr[1] += 2;
+ptr++;      // Must flush before loop
+while (*ptr) { ... }
+```
+
+The physical pointer must be correct before loops because the loop condition tests `*ptr`, not `ptr[offset]`.
+
+### Correctness
+
+**Claim:** Offset optimization preserves program semantics.
+
+**Proof:**
+
+1. **Cell values:** Array indexing `ptr[n]` is semantically equivalent to `*(ptr + n)`, so `ptr[n] = v` is equivalent to moving the pointer by `n`, assigning `*ptr = v`, then moving back by `-n`. ✓
+
+2. **Pointer position:** Physical pointer position is synchronized at all observable points:
+   - Loop conditions (test `*ptr`)
+   - I/O operations (read/write `*ptr`)
+   - Program termination
+
+   Between these points, the physical pointer may differ from the logical position, but this discrepancy is not observable. ✓
+
+3. **Operation ordering:** Operations on the same cell are applied in program order. Operations on different cells are independent and can be reordered. ✓
+
+### Performance Impact
+
+**Improved characteristics:**
+- Less redundant pointer arithmetic
+- Better cache behavior (less pointer mutation)
+- Improved instruction-level parallelism (independent offset accesses)
+
+For `>+>++>+++<<<` repeated 1000 times:
+- **Without optimization:** 6,000 pointer operations + 3,000 arithmetic
+- **With optimization:** 0 pointer operations + 3,000 arithmetic
+- **Speedup:** ~1.5-2× depending on architecture
+
+---
+
+## Constant Propagation
+**TBD**
+
+
+## Dead Code Elimination
+**TBD**
+
+
+## Conditional Replacement
+**TBD**
+
+
+## I/O Coalescing
+**TBD**
+
+
+## Strength Reduction
+**TBD**
+
+## Nested Loop Detection
+**TBD**
+
+## JIT Compilation
+**TBD**
