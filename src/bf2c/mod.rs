@@ -46,27 +46,27 @@ pub mod bf2c {
         Ok(out)
     }
 
-    // fn emit(tokens: &Vec<BfSymbol>, format: ) -> String {
-    //     let mut out = String::new();
-    //     if tokens.contains(&BfSymbol::Period) || tokens.contains(&BfSymbol::Comma) {
-    //         out.push_str("#include <stdio.h>\n");
-    //     }
-    //
-    //     out.push_str("int main() {\n");
-    //
-    //     // for token in tokens {
-    //     //
-    //     // }
-    //
-    //     out.push_str("}\n");
-    //     out
-    //
-    // }
+    fn emit(tokens: &Vec<BfSymbol>) -> String {
+        use std::fmt::Write;
+        let mut out = String::new();
+        let indent = " ".repeat(4);
+        if tokens.contains(&BfSymbol::Period) || tokens.contains(&BfSymbol::Comma) {
+            writeln!(out, "#include <stdio.h>").unwrap();
+        }
+
+        writeln!(out, "int main() {{").unwrap();
+        // for token in tokens {
+        //
+        // }
+        writeln!(out, "{}return 0;", indent).unwrap();
+        writeln!(out, "}}").unwrap();
+        out
+    }
 
 
     #[cfg(test)]
     mod tests {
-        use super::{BfSymbol, parse_without_verification, parse};
+        use super::{BfSymbol, parse_without_verification, parse, emit};
         #[test]
         fn parse_empty() {
             assert!(parse_without_verification("").is_empty());
@@ -106,10 +106,12 @@ pub mod bf2c {
             assert!(tokens.is_err())
         }
 
-        // #[test]
-        // fn emit_empty_program() {
-        //     let tokens: Vec<BfSymbol> = vec![];
-        //     assert_eq!(emit(&tokens), String::new());
-        // }
+        #[test]
+        fn emit_empty_program() {
+            let tokens: Vec<BfSymbol> = vec![];
+            let expected: String = String::from("int main() {\n    return 0;\n}\n");
+            assert_eq!(emit(&tokens), expected);
+        }
+
     }
 }
