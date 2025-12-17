@@ -11,7 +11,7 @@ Here is a table of contents for all of the current optimizations:
 3. [Scan Loops](#scan-loops)
 4. [Multiplication Loops](#multiplication-loops)
 5. [Offset Optimization](#offset-optimization)
-6. [Multi-Cell I/O Optimization](#multi-cell-io-optimization)
+6. [Conditional Conversion](#conditional-conversion)
 ## Intermediate Representation
 
 Below is the IR that we have decided on, in Backus-Naur Form:
@@ -604,8 +604,6 @@ ptr[1] += 3;  // Access offset 1 directly
 
 We may also use offset optimization on I/O operations:
 
-```c 
-
 ### Recognition Conditions
 
 A sequence of operations qualifies for offset optimization when:
@@ -704,3 +702,329 @@ For `>+>++>+++<<<` repeated 1000 times:
 - **Speedup:** ~1.5-2× depending on architecture
 
 ---
+
+## Conditional Conversion
+Not all loops in Brainfuck are loops in C. If we know that a loop in Brainfuck executes at most once, then it may be an if-statement in the C Programming Language.
+
+**Conditional Conversion** involves converting Brainfuck loops are known to execute at most once, and then converting them to conditionals in the C code rather than a standard, unoptimized while loop. This is done to reduce loop overhead.
+
+### Conversion Condition
+A Brainfuck loop may be converted to a if-statement rather than a while loop if and only if:
+1. There is zero net pointer movement, the loop must return the pointer to its starting position.
+2. The loop must not contain other Loop statements (general loops), MultiplicationLoop statements (these are already optimized), ScanLoop statements (these modify pointer position unpredictably)
+
+### Conditional Cases
+There are two cases of conditional conversion, one which is trivial and the other which is very complex to implement.
+
+#### Case 1: Zero Loop Conditional: Trivial
+
+If a Brainfuck Loop satisfies all the Conversion Conditions and contains a `ZeroLoop` statement at offset 0 (the current cell position when tracking cumulative pointer movement through the loop body), then the loop is guaranteed to execute at most once.
+
+**Detection:**
+As we trace through the loop body tracking cumulative pointer offset, if we encounter a `ZeroLoop` when the current offset equals 0, the loop unconditionally zeros the current cell and will terminate after at most one iteration. This guarantees single iteration because:
+- If `*ptr = 0` initially: loop condition is false, body never executes
+- If `*ptr ≠ 0` initially: loop executes, `ZeroLoop` sets `*ptr = 0`, loop condition becomes false, terminates after exactly 1 iteration
+
+**Examples:**
+
+**Example 1:** Zero with side effects after
+```bf
+[[-]>+++<]
+```
+
+**IR form:**
+```
+Loop([
+    ZeroLoop,      // At offset 0
+    Move(1),       // Offset becomes 1
+    Add(3),        // Modify offset 1
+    Move(-1)       // Return to offset 0
+])
+```
+
+**Converted to:**
+```c
+if (*ptr != 0) {
+    *ptr = 0;
+    ptr[1] += 3;
+}
+```
+
+**Example 2:** Zero with side effects before
+```bf
+[>+++<[-]]
+```
+
+**IR form:**
+```
+Loop([
+    Move(1),       // Offset becomes 1
+    Add(3),        // Modify offset 1
+    Move(-1),      // Return to offset 0
+    ZeroLoop       // At offset 0
+])
+```
+
+**Converted to:**
+```c
+if (*ptr != 0) {
+    ptr[1] += 3;
+    *ptr = 0;
+}
+```
+
+**Example 3:** Degenerate case when the body only contains a zeroloop.
+```bf
+[[-]]
+```
+
+**IR form:**
+```
+Loop([ZeroLoop])
+```
+
+This is a special optimization! Since the body only contains `ZeroLoop` and nothing else, we can skip the conditional entirely:
+```c
+*ptr = 0;  // Setting 0→0 is a no-op, so no if-check needed
+```
+
+#### Case 2: Boolean Value Conditional: Non-trivial
+Suppose we have a loop that follows all conversion conditions but doesn't adhere to case 1. If we know the cell can only be 0 or 1 (a boolean), then the loop executes **at most once**.
+
+**Conditions:**
+
+For this optimization to apply:
+1. The loop must satisfy all Conversion Conditions (zero net pointer movement, no nested loops)
+2. The loop body must change the current cell by exactly ±1 per iteration (unit increment or decrement)
+3. We must **prove** that the current cell can only hold values 0 or 1
+
+There are two sub-cases for this case:
+
+**Case A: Cell is 0**
+```
+Initial: *ptr = 0
+Loop condition (*ptr != 0): FALSE
+Result: Loop body never executes
+```
+
+**Case B: Cell is 1**
+```
+Initial: *ptr = 1
+Loop condition (*ptr != 0): TRUE → execute body
+Body decrements by 1: *ptr becomes 0
+Loop condition (*ptr != 0): FALSE
+Result: Loop body executes exactly once, then terminates
+```
+
+Since the value is provably 0 or 1, **no other cases exist**. The loop cannot execute more than once.
+
+In order to prove that a cell is boolean, ae need to track what values each cell might contain as we process the program. This is called **value range analysis**.
+
+Think of it like this: each cell has a "possible values" range:
+- After `[-]`: range is `[0, 0]` (definitely 0)
+- After `[-]+`: range is `[1, 1]` (definitely 1)
+- After `[-]++`: range is `[2, 2]` (definitely 2)
+- After unknown operations: range is `[0, 255]` (could be anything)
+
+A cell is **provably boolean** when its range is `[0, 1]` (or narrower like `[0, 0]` or `[1, 1]`).
+
+---
+
+**Example 1: Simple boolean flag**
+
+```bf
+[-]    # Zero the cell: range becomes [0, 0]
++      # Increment: range becomes [1, 1]
+[>+++<-]
+```
+
+**Step-by-step analysis:**
+1. After `[-]`: Cell 0 has range `[0, 0]`
+2. After `+`: Cell 0 has range `[1, 1]` ✓ This is boolean!
+3. Loop `[>+++<-]` body analysis:
+   - Decrements cell 0 by 1 per iteration ✓
+   - Returns to starting position ✓
+   - No nested loops ✓
+
+**Since cell 0 is provably `1`, we know the loop executes exactly once:**
+
+```c
+*ptr = 0;
+*ptr = 1;
+// Instead of: while (*ptr) { ptr[1] += 3; (*ptr)--; }
+if (*ptr != 0) {  // We know this is always true
+    ptr[1] += 3;
+    (*ptr)--;
+}
+```
+
+Since we know `*ptr = 1` at this point, we can use constant propagation to simplify:
+```c
+ptr[1] += 3;
+*ptr = 0;
+```
+
+---
+
+**Example 2: Boolean from conditional operation**
+
+```bf
+[-]>      # Zero cell 0, move to cell 1
+[<+>-]    # Transfer cell 1 to cell 0 (if cell 1 was non-zero)
+<         # Return to cell 0
+[>+<-]    # Our target loop
+```
+
+**Analysis:**
+- The transfer operation `[<+>-]` is a common pattern that creates a boolean:
+  - If cell 1 was `0`: cell 0 becomes `0`
+  - If cell 1 was `1`: cell 0 becomes `1`
+  - If cell 1 was `5`: cell 0 becomes `5` (but this makes cell 0 NOT boolean!)
+
+**Without tracking cell 1's range,** we cannot prove cell 0 is boolean after the transfer.
+
+**But if we know cell 1 is boolean** (from earlier analysis), then cell 0 becomes boolean too!
+
+This shows why value range analysis must track **all cells**, not just the current one.
+
+---
+
+**Example 3: Normalize any value to boolean**
+
+```bf
+[[-]+]     # If cell non-zero: zero it, then set to 1
+```
+
+**Execution trace:**
+- If `*ptr = 0`: Loop doesn't execute, `*ptr` stays `0`
+- If `*ptr = 5`: Loop executes once, `ZeroLoop` sets to `0`, then `+` sets to `1`
+- Result: `*ptr ∈ [0, 1]` ✓ Boolean!
+
+---
+
+**When does Case 2 apply instead of MultiplicationLoop?**
+
+Consider this pattern:
+```bf
+[>+++<-]
+```
+
+**Without value range analysis:**
+- We don't know if the cell is boolean
+- Optimized as `MultiplicationLoop`: `ptr[1] += 3 * (*ptr); *ptr = 0;`
+
+**With value range analysis proving boolean:**
+- We know `*ptr ∈ [0, 1]`
+- Can optimize as conditional: `if (*ptr) { ptr[1] += 3; *ptr = 0; }`
+
+**Why prefer the conditional?**
+```c
+// MultiplicationLoop (works for any value)
+uint8_t x = *ptr;
+ptr[1] += 3 * x;  // Requires multiplication
+*ptr = 0;
+
+// Conditional (when boolean)
+if (*ptr != 0) {  // Only checks 0 or 1
+    ptr[1] += 3;  // Just addition, no multiplication!
+    *ptr = 0;
+}
+```
+
+The conditional version:
+- Avoids multiplication (slightly faster)
+- Makes the boolean nature explicit
+- May enable further optimizations
+
+---
+
+### Invalid Examples (Cannot Convert)
+
+**Example 1:** No zero operation
+```bf
+[>+<]
+```
+❌ Loop adds to offset 1 but never zeros the current cell. May execute multiple times depending on initial value.
+
+**Example 2:** Zero at wrong offset
+```bf
+[>[-]<]
+```
+❌ The `ZeroLoop` occurs at offset 1, not offset 0. The current cell is not modified, so the loop condition never changes. This is an infinite loop (unless current cell is already 0).
+
+**Example 3:** Nested control flow
+```bf
+[[-]>>[+]<<]
+```
+❌ Contains multiple `ZeroLoop` statements and complex control flow. Rejected due to Conversion Condition 2 (no nested loops).
+
+**Example 4:** Non-zero net pointer movement
+```bf
+[[-]>]
+```
+❌ Net pointer movement is +1, violates Conversion Condition 1.
+
+**Example 5:** Multiplication loop pattern
+```bf
+[>+++<-]
+```
+❌ This is a unit-decrement loop, but **without value range analysis** we cannot prove the cell is boolean. This pattern is already optimized by the MultiplicationLoop optimization:
+```c
+uint8_t x = *ptr;
+ptr[1] += 3 * x;
+*ptr = 0;
+```
+
+However, **with value range analysis**, if we can prove `*ptr ∈ [0, 1]`, then this qualifies for Case 2 conversion.
+
+### Correctness Proof
+
+**Claim:** Converting qualifying loops to if-statements preserves program semantics.
+
+**Proof for Case 1 (ZeroLoop present):**
+
+Let L = `Loop(body)` where body contains `ZeroLoop` at offset 0.
+
+**When `*ptr = 0` initially:**
+- Original: Loop condition `*ptr != 0` is false. Body does not execute.
+- Converted: If condition `*ptr != 0` is false. Body does not execute.
+- Final state identical. ✓
+
+**When `*ptr ≠ 0` initially (let `*ptr = n` where n ∈ [1, 255]):**
+- Original: Loop executes body. Body contains `ZeroLoop` which sets `*ptr = 0`. Loop condition becomes false. Loop terminates after exactly 1 iteration.
+- Converted: If condition `*ptr != 0` is true. Body executes once. Body contains `ZeroLoop` which sets `*ptr = 0`.
+- Both execute body exactly once with identical side effects. ✓
+
+**Pointer position:**
+Both forms maintain pointer position since Conversion Condition 1 requires zero net movement. ✓
+
+**Side effects:**
+All operations in body execute in the same order in both forms. I/O operations, memory modifications, and pointer movements are identical. ✓
+
+**Proof for Case 2 (Boolean + unit decrement):**
+
+Let L = `Loop(body)` where:
+- body decrements offset 0 by 1 per iteration
+- value range analysis proves `*ptr ∈ [0, 1]`
+
+**When `*ptr = 0` initially:**
+- Original: Loop condition false. Body does not execute.
+- Converted: If condition false. Body does not execute.
+- Final state identical. ✓
+
+**When `*ptr = 1` initially:**
+- Original: Loop executes body. Body decrements `*ptr` by 1, so `*ptr` becomes 0. Loop condition becomes false. Loop terminates after exactly 1 iteration.
+- Converted: If condition true. Body executes once, decrements `*ptr` to 0.
+- Both execute body exactly once with identical side effects. ✓
+
+**Impossibility of other values:**
+Value range analysis guarantees `*ptr ∈ [0, 1]`, so no other cases exist. ✓
+
+### Performance Impact
+1. **Eliminates loop back-edge:** No jump instruction back to loop start
+2. **Eliminates redundant condition check:** Loop checks condition twice (entry + potential re-entry), if-statement checks once
+3. **Better branch prediction:** Modern CPUs handle if-statements slightly better than small loops
+4. **Improved code generation:** Compilers generate simpler code for if-statements
+- Modest **5-10%** speedupfor code with this pattern
+- Primarily benefits code clarity rather than raw performance
+- The real benefit is **semantic clarity** by making single-execution intent explicit to both humans and optimizers
