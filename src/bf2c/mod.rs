@@ -12,7 +12,7 @@ pub mod bf2c {
     }
     pub fn tokenise(buf: &str) -> Vec<BfSymbol> {
         let mut out = Vec::new();
-        for c in buf.chars() {
+        for c in buf.trim().chars() {
             match c {
                 '<' => out.push(BfSymbol::Left),
                 '>' => out.push(BfSymbol::Right),
