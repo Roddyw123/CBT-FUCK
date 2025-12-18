@@ -8,12 +8,10 @@ use std::process;
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() != 3 {
-        eprintln!("Usage: {} <input.bf> <output.c>", args[0]);
-        process::exit(1);
-    }
+    let input_file_path = args.get(1).map(|s| s.as_str()).unwrap_or("src/bf.bf");
+    let output_file_path = args.get(2).map(|s| s.as_str()).unwrap_or("c.c");
 
-    let mut input = File::open(&args[1])
+    let mut input = File::open(input_file_path)
         .expect("Unable to open input file");
     
     let mut contents = String::new();
@@ -23,7 +21,7 @@ fn main() {
     let result = bf2cify(contents)
         .expect("failed to bf2cify");
 
-    let mut output = File::create(&args[2])
+    let mut output = File::create(output_file_path)
         .expect("could not create output file");
 
     output.write_all(result.as_bytes()).unwrap();
