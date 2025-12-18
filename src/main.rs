@@ -8,8 +8,24 @@ use std::process;
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let input_file_path = args.get(1).map(|s| s.as_str()).unwrap_or("src/bf.bf");
-    let output_file_path = args.get(2).map(|s| s.as_str()).unwrap_or("c.c");
+    // handle --help
+    if args.len() == 2 && args[1] == "--help" {
+        println!("Usage: {} [input.bf output.c] [options]", args[0]);
+        println!("Defaults (if not provided):");
+        println!("  input.bf  -> input file");
+        println!("  output.c  -> output file");
+        process::exit(0);
+    }
+
+    // handle input and output files
+    let (input_file_path, output_file_path) = match args.len() {
+        1 => ("src/bf.bf", "c.c"),                  // default when no args
+        3 => (args[1].as_str(), args[2].as_str()),  // normal when two args
+        _ => {
+            eprintln!("Invalid usage, try --help");
+            process::exit(-1);
+        }
+    };
 
     let mut input = File::open(input_file_path)
         .expect("Unable to open input file");
