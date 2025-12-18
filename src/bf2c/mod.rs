@@ -109,6 +109,11 @@ pub mod bf2c {
         out
     }
 
+    pub fn bf2cify(input: String) -> Result<String, String>{
+        let parsed = parse(input.as_str(), true)?;
+        Ok(emit(&parsed))
+    }
+
 
     #[cfg(test)]
     mod tests {
