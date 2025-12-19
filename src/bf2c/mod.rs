@@ -114,6 +114,11 @@ pub mod bf2c {
         Ok(emit(&parsed))
     }
 
+    pub fn bf2cify_without_verification(input: String) -> Result<String, String>{
+        let parsed = parse(input.as_str(), false)?;
+        Ok(emit(&parsed))
+    }
+
 
     #[cfg(test)]
     mod tests {
