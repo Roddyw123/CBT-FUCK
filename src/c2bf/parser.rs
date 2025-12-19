@@ -159,7 +159,7 @@ pub mod parser {
                 func_dec.clone()
                     .map(|(((ty,name ), params), body)|
                         LStmt::FuncDec(ty, name, params.into_iter().map(|((ty, name), arr)| (ty, name, arr)).collect(), body)),
-                expr()
+                expr().then_ignore(sep())
                     .map(LStmt::Expr),
                 assignment
                     .map(|(name, exp)|
@@ -368,6 +368,74 @@ pub mod parser {
         fn global_function_declaration_2_parameters_trailing_comma_test() {
             let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(char a, char b, ){}").into_result();
             assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", vec![(Type::Char, "a", None), (Type::Char, "b", None)], Vec::new())]));
+        }
+
+        // Local Statement Tests
+
+        #[test]
+        fn local_char_variable_declaration_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){char e;}").into_result();
+            assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", Vec::new(), vec![LStmt::VarDec(Type::Char, "e", None, None)])]));
+        }
+
+        #[test]
+        fn local_char_variable_declaration_missing_semicolon_fail_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){char e}").into_result();
+            assert!(stmts.is_err());
+        }
+
+        #[test]
+        fn local_char_empty_array_variable_declaration_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){char e[];}").into_result();
+            assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", Vec::new(), vec![LStmt::VarDec(Type::Char, "e", Some(None), None)])]));
+        }
+
+        #[test]
+        fn local_char_sized_array_variable_declaration_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){char e[v];}").into_result();
+            assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", Vec::new(), vec![LStmt::VarDec(Type::Char, "e", Some(Some(Expr::Atom(Atom::Var("v")))), None)])]));
+        }
+
+        #[test]
+        fn local_char_variable_declaration_missing_expression_fail_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){char e =;}").into_result();
+            assert!(stmts.is_err());
+        }
+
+        #[test]
+        fn local_char_sized_array_variable_declaration_extra_identifier_fail_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){char e e =;}").into_result();
+            assert!(stmts.is_err());
+        }
+
+        #[test]
+        fn local_char_sized_array_variable_declaration_unmatched_right_bracket_fail_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){char e [=;}").into_result();
+            assert!(stmts.is_err());
+        }
+
+        #[test]
+        fn local_char_sized_array_variable_declaration_unmatched_left_bracket_fail_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){char e ]=;}").into_result();
+            assert!(stmts.is_err());
+        }
+
+        #[test]
+        fn local_untyped_variable_assignment_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){e = v;}").into_result();
+            assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", Vec::new(), vec![LStmt::Assignment("e", Expr::Atom(Atom::Var("v")))])]));
+        }
+
+        #[test]
+        fn local_char_variable_declaration_assignment_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){char e = v;}").into_result();
+            assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", Vec::new(), vec![LStmt::VarDec(Type::Char, "e", None, Some(Expr::Atom(Atom::Var("v"))))])]));
+        }
+
+        #[test]
+        fn local_char_variable_declaration_assignment_missing_semicolon_fail_test() {
+            let stmts = parser::<&str, Err<Cheap>>().parse("char foo(){char e = v}").into_result();
+            assert!(stmts.is_err());
         }
     }
 }
