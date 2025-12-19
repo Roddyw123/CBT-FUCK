@@ -29,7 +29,7 @@ pub mod ast {
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum LStmt<'src> {
-        Dec(Type, &'src str, Option<Option<Expr<'src>>>, Option<Expr<'src>>),
+        VarDec(Type, &'src str, Option<Option<Expr<'src>>>, Option<Expr<'src>>),
         While(Expr<'src>, Vec<LStmt<'src>>),
         Ifs((Expr<'src>, Vec<LStmt<'src>>), Vec<(Expr<'src>, Vec<LStmt<'src>>)>, Option<Vec<LStmt<'src>>>),
         For(Option<Box<LStmt<'src>>>, Option<Box<LStmt<'src>>>, Option<Box<LStmt<'src>>>, Vec<LStmt<'src>>),

@@ -146,7 +146,7 @@ pub mod parser {
             choice((
                 declaration()
                     .map(|(((ty, name), arr), exp)|
-                        LStmt::Dec(ty, name, arr, exp)),
+                        LStmt::VarDec(ty, name, arr, exp)),
                 x_statment("while")
                     .map(|(cond, body)|
                         LStmt::While(cond, body)),
