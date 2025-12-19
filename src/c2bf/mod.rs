@@ -177,7 +177,7 @@ pub mod c2bf {
                     just('=').padded()
                     .ignore_then(expr())
                 )
-                .then_ignore(sep);
+                .then_ignore(sep.clone());
             choice((
                 declaration()
                     .map(|(((ty, name), arr), exp)|
@@ -209,7 +209,9 @@ pub mod c2bf {
                 .map(|(((ty,name ), params), body)|
                     GStmt::FuncDec(ty, name, params.into_iter().map(|((ty, name), arr)| (ty, name, arr)).collect(), body)),
         ))
-        .repeated()
+        .separated_by(sep.clone().repeated())
+        .allow_trailing()
+        .allow_leading()
         .collect::<Vec<GStmt>>();
         global_stmts()
     }
@@ -224,6 +226,18 @@ pub mod c2bf {
         #[test]
         fn empty_test() {
             let stmts = parser::<&str, Err<EmptyErr>>().parse("").into_result();
+            assert_eq!(stmts, Ok(Vec::new()));
+        }
+        
+        #[test]
+        fn empty_line_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse(";").into_result();
+            assert_eq!(stmts, Ok(Vec::new()));
+        }
+
+        #[test]
+        fn empty_lines_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse(";;").into_result();
             assert_eq!(stmts, Ok(Vec::new()));
         }
 
