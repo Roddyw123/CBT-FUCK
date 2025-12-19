@@ -1,6 +1,6 @@
 pub mod c2bf {
 
-    use chumsky::{IterParser, Parser, error::{EmptyErr, Cheap}, extra::{Err, ParserExtra}, input::{Input}, prelude::{choice, just, recursive}, text::{self, ascii::keyword}};
+    use chumsky::{IterParser, Parser, error::{EmptyErr, Cheap}, extra::{Err, ParserExtra}, input::Input, prelude::{choice, just, recursive}, text::{self, ascii::keyword}};
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum Type {
@@ -47,7 +47,7 @@ pub mod c2bf {
         FuncDec(Type, &'src str, Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>, Vec<LStmt<'src>>),
     }
 
-    pub fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<EmptyErr>> {
+    pub fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Cheap>> {
         // not mapped to Var immediatly as it can be a function as well
         let ident = || text::ascii::ident()
             .padded();
@@ -124,14 +124,19 @@ pub mod c2bf {
             O: Parser<'src, I, char, E> + Clone,
             C: Parser<'src, I, char, E> + Clone,
         {
-        // let block_help = |stmt, open, close| {
             stmt.clone()
             .repeated()
             .collect::<Vec<LStmt<'src>>>()
             .delimited_by(open, close)
-        // };
         }
 
+        // bad option?(don't know why)
+        // fn func_dec_help<'src, I: Input<'src>+ ValueInput<'src>, E: ParserExtra<'src, I>, S>(stmt: S) -> impl Parser<'src, I, ((Type, &'src str), Vec<((Type, &'src str), Option<Option<Expr<'src>>>)>, Vec<LStmt<'src>>), E> + Clone
+        // where
+        //     S: Parser<'src, I, LStmt<'src>, E> + Clone,
+        //     <I as Input<'src>>::Token: chumsky::text::Char,
+        //     char: OrderedSeq<'src, <I as Input<'src>>::Token>
+        // {
         let func_dec_help = |stmt| {
             types()
                 .then(ident())
