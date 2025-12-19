@@ -25,6 +25,7 @@ pub mod ast {
         Dec(Box<Expr<'src>>),
         
         Call(&'src str, Vec<Expr<'src>>),
+        Assignment(Atom<'src>, Box<Expr<'src>>),
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,7 +36,6 @@ pub mod ast {
         For(Option<Box<LStmt<'src>>>, Option<Box<LStmt<'src>>>, Option<Box<LStmt<'src>>>, Vec<LStmt<'src>>),
         FuncDec(Type, &'src str, Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>, Vec<LStmt<'src>>),
         Expr(Expr<'src>),
-        Assignment(&'src str, Expr<'src>),
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]

@@ -22,7 +22,7 @@ pub mod parser {
 
         let expr = || recursive(|expr| {
 
-            let atom = recursive(|atom| {
+            let atom = || recursive(|atom| {
                 let array = atom.map(Box::new)
                         .then(
                             expr.clone()
@@ -43,8 +43,18 @@ pub mod parser {
                 ))
             });
 
+            // TODO: change into pratt parser
+            let assignment = atom()
+                .then(
+                    just('=').padded()
+                    .ignore_then(expr.clone()).map(Box::new)
+                );
+
             choice((
-                atom
+                assignment
+                    .map(|(name, exp)|
+                        Expr::Assignment(name, exp)),
+                atom()
                     .map(Expr::Atom),
                 expr.clone()
                     .delimited_by(open_bracket(), close_bracket()),
@@ -137,12 +147,6 @@ pub mod parser {
                 )
                 .then(block.clone());
             let func_dec = func_dec_help.clone()(stmt);
-            let assignment = ident()
-                .then(
-                    just('=').padded()
-                    .ignore_then(expr())
-                )
-                .then_ignore(sep());
             choice((
                 declaration()
                     .map(|(((ty, name), arr), exp)|
@@ -161,9 +165,6 @@ pub mod parser {
                         LStmt::FuncDec(ty, name, params.into_iter().map(|((ty, name), arr)| (ty, name, arr)).collect(), body)),
                 expr().then_ignore(sep())
                     .map(LStmt::Expr),
-                assignment
-                    .map(|(name, exp)|
-                        LStmt::Assignment(name, exp)),
             ))
         });
         let global_stmts = || choice((
@@ -423,7 +424,7 @@ pub mod parser {
         #[test]
         fn local_untyped_variable_assignment_test() {
             let stmts = parser::<&str, Err<EmptyErr>>().parse("char foo(){e = v;}").into_result();
-            assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", Vec::new(), vec![LStmt::Assignment("e", Expr::Atom(Atom::Var("v")))])]));
+            assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", Vec::new(), vec![LStmt::Expr(Expr::Assignment(Atom::Var("e"), Box::new(Expr::Atom(Atom::Var("v")))))])]));
         }
 
         #[test]
