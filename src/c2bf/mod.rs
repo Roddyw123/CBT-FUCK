@@ -3,20 +3,20 @@ pub mod c2bf {
     use chumsky::{IterParser, Parser, error::Cheap, extra::{Err, ParserExtra}, input::Input, prelude::{choice, just, recursive}, text::{self, ascii::keyword}};
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    enum Type {
+    pub enum Type {
         Char,
         Int
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    enum Atom<'src> {
+    pub enum Atom<'src> {
         Num(u32),
         Var(&'src str),
         Array(Box<Atom<'src>>, Box<Expr<'src>>),
     }
     
     #[derive(Debug, Clone, PartialEq, Eq)]
-    enum Expr<'src> {
+    pub enum Expr<'src> {
         Atom(Atom<'src>),
         Neg(Box<Expr<'src>>),
         Add(Box<Expr<'src>>, Box<Expr<'src>>),
@@ -31,7 +31,7 @@ pub mod c2bf {
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    enum LStmt<'src> {
+    pub enum LStmt<'src> {
         Dec(Type, &'src str, Option<Option<Expr<'src>>>, Option<Expr<'src>>),
         While(Expr<'src>, Vec<LStmt<'src>>),
         Ifs((Expr<'src>, Vec<LStmt<'src>>), Vec<(Expr<'src>, Vec<LStmt<'src>>)>, Option<Vec<LStmt<'src>>>),
@@ -42,12 +42,12 @@ pub mod c2bf {
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    enum GStmt<'src> {
+    pub enum GStmt<'src> {
         VarDec(Type, &'src str, Option<Option<Expr<'src>>>, Option<Expr<'src>>),
         FuncDec(Type, &'src str, Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>, Vec<LStmt<'src>>),
     }
 
-    fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Cheap>> {
+    pub fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Cheap>> {
         // not mapped to Var immediatly as it can be a function as well
         let ident = text::ascii::ident()
             .padded();
