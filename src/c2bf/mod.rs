@@ -1,6 +1,6 @@
 pub mod c2bf {
 
-    use chumsky::{IterParser, Parser, error::Cheap, extra::{Err, ParserExtra}, input::Input, prelude::{choice, just, recursive}, text::{self, ascii::keyword}};
+    use chumsky::{IterParser, Parser, error::{EmptyErr, Cheap}, extra::{Err, ParserExtra}, input::{Input}, prelude::{choice, just, recursive}, text::{self, ascii::keyword}};
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum Type {
@@ -47,22 +47,22 @@ pub mod c2bf {
         FuncDec(Type, &'src str, Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>, Vec<LStmt<'src>>),
     }
 
-    pub fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Cheap>> {
+    pub fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<EmptyErr>> {
         // not mapped to Var immediatly as it can be a function as well
-        let ident = text::ascii::ident()
+        let ident = || text::ascii::ident()
             .padded();
 
-        let num = text::int(10)
+        let num = || text::int(10)
             .padded();
 
-        let sep = just(';').padded();
+        let sep = || just(';').padded();
 
-        let open_bracket = just('(').padded();
-        let close_bracket = just(')').padded();
-        let open_curly_bracket = just('{').padded();
-        let close_curly_bracket = just('}').padded();
-        let open_square_bracket = just('[').padded();
-        let close_square_bracket = just(']').padded();
+        let open_bracket = || just('(').padded();
+        let close_bracket = || just(')').padded();
+        let open_curly_bracket = || just('{').padded();
+        let close_curly_bracket = || just('}').padded();
+        let open_square_bracket = || just('[').padded();
+        let close_square_bracket = || just(']').padded();
 
         let expr = || recursive(|expr| {
 
@@ -70,13 +70,13 @@ pub mod c2bf {
                 let array = atom.map(Box::new)
                         .then(
                             expr.clone()
-                            .delimited_by(open_square_bracket, close_square_bracket)
+                            .delimited_by(open_square_bracket(), close_square_bracket())
                             .map(Box::new)
                         );
                 choice((
-                    ident
+                    ident()
                         .map(Atom::Var),
-                    num
+                    num()
                         .map(|s: &str|
                             Atom::Num(s.parse().unwrap())),
                     // TODO: solve left-recursion issue
@@ -91,7 +91,7 @@ pub mod c2bf {
                 atom
                     .map(Expr::Atom),
                 expr.clone()
-                    .delimited_by(open_bracket, close_bracket),
+                    .delimited_by(open_bracket(), close_bracket()),
             ))
         });
 
@@ -101,12 +101,12 @@ pub mod c2bf {
         ));
 
         let typed_variable = || types()
-            .then(ident)
+            .then(ident())
             .then(
                 // hard coded 1D array
                 expr()
                 .or_not()
-                .delimited_by(open_square_bracket, close_square_bracket)
+                .delimited_by(open_square_bracket(), close_square_bracket())
                 .or_not()
             );
         
@@ -116,7 +116,7 @@ pub mod c2bf {
                 .ignore_then(expr())
                 .or_not()
             )
-            .then_ignore(sep);
+            .then_ignore(sep());
 
         fn block_help<'src, I: Input<'src>, E: ParserExtra<'src, I>, S, O, C>(stmt: S, open: O, close: C) -> impl Parser<'src, I, Vec<LStmt<'src>>, E> + Clone
         where
@@ -124,30 +124,34 @@ pub mod c2bf {
             O: Parser<'src, I, char, E> + Clone,
             C: Parser<'src, I, char, E> + Clone,
         {
+        // let block_help = |stmt, open, close| {
             stmt.clone()
-                .repeated()
-                .collect::<Vec<LStmt<'src>>>()
-                .delimited_by(open, close)
+            .repeated()
+            .collect::<Vec<LStmt<'src>>>()
+            .delimited_by(open, close)
+        // };
         }
 
-        let func_dec_help = |stmt| types()
-                .then(ident)
+        let func_dec_help = |stmt| {
+            types()
+                .then(ident())
                 .then(
                     typed_variable()
                     .separated_by(just(',').padded())
                     .allow_trailing()
                     .collect::<Vec<_>>()
-                    .delimited_by(open_bracket, close_bracket)
+                    .delimited_by(open_bracket(), close_bracket())
                 )
-                .then(block_help(stmt, open_curly_bracket, close_curly_bracket).clone());
+                .then(block_help(stmt, open_curly_bracket(), close_curly_bracket()).clone())
+        };
         
         let local_stmt =  || recursive(|stmt| {
-            let block = block_help(stmt.clone(), open_curly_bracket, close_curly_bracket);
+            let block = block_help(stmt.clone(), open_curly_bracket(), close_curly_bracket());
 
             let x_statment = |name| keyword(name).padded()
                 .ignore_then(
                     expr()
-                    .delimited_by(open_bracket, close_bracket)
+                    .delimited_by(open_bracket(), close_bracket())
                 )
                 .then(block.clone());
             let if_statment = x_statment("if").clone()
@@ -164,20 +168,20 @@ pub mod c2bf {
             let for_loop = keyword("for").padded()
                 .ignore_then(
                     stmt.clone().or_not()
-                    .then_ignore(sep)
+                    .then_ignore(sep())
                     .then(stmt.clone().or_not())
-                    .then_ignore(sep)
+                    .then_ignore(sep())
                     .then(stmt.clone().or_not())
-                    .delimited_by(open_bracket, close_bracket)
+                    .delimited_by(open_bracket(), close_bracket())
                 )
                 .then(block.clone());
             let func_dec = func_dec_help.clone()(stmt);
-            let assignment = ident.clone()
+            let assignment = ident()
                 .then(
                     just('=').padded()
                     .ignore_then(expr())
                 )
-                .then_ignore(sep.clone());
+                .then_ignore(sep());
             choice((
                 declaration()
                     .map(|(((ty, name), arr), exp)|
@@ -209,7 +213,7 @@ pub mod c2bf {
                 .map(|(((ty,name ), params), body)|
                     GStmt::FuncDec(ty, name, params.into_iter().map(|((ty, name), arr)| (ty, name, arr)).collect(), body)),
         ))
-        .separated_by(sep.clone().repeated())
+        .separated_by(sep().repeated())
         .allow_trailing()
         .allow_leading()
         .collect::<Vec<GStmt>>();
