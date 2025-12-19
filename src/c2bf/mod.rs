@@ -47,7 +47,7 @@ pub mod c2bf {
         FuncDec(Type, &'src str, Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>, Vec<LStmt<'src>>),
     }
 
-    pub fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Cheap>> {
+    fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Cheap>> {
         // not mapped to Var immediatly as it can be a function as well
         let ident = text::ascii::ident()
             .padded();
@@ -64,7 +64,7 @@ pub mod c2bf {
         let open_square_bracket = just('[').padded();
         let close_square_bracket = just(']').padded();
 
-        let expr = recursive(|expr| {
+        let expr = || recursive(|expr| {
 
             let atom = recursive(|atom| {
                 let array = atom.map(Box::new)
@@ -95,25 +95,25 @@ pub mod c2bf {
             ))
         });
 
-        let types = choice((
+        let types = || choice((
             keyword("char").to(Type::Char),
             keyword("int").to(Type::Int)
         ));
 
-        let typed_variable = types.clone()
+        let typed_variable = || types()
             .then(ident)
             .then(
                 // hard coded 1D array
-                expr.clone()
+                expr()
                 .or_not()
                 .delimited_by(open_square_bracket, close_square_bracket)
                 .or_not()
             );
         
-        let declaration = typed_variable.clone()
+        let declaration = || typed_variable()
             .then(
                 just('=').padded()
-                .ignore_then(expr.clone())
+                .ignore_then(expr())
                 .or_not()
             )
             .then_ignore(sep);
@@ -130,10 +130,10 @@ pub mod c2bf {
                 .delimited_by(open, close)
         }
 
-        let func_dec_help = |stmt| types.clone()
+        let func_dec_help = |stmt| types()
                 .then(ident)
                 .then(
-                    typed_variable
+                    typed_variable()
                     .separated_by(just(',').padded())
                     .allow_trailing()
                     .collect::<Vec<_>>()
@@ -141,12 +141,12 @@ pub mod c2bf {
                 )
                 .then(block_help(stmt, open_curly_bracket, close_curly_bracket).clone());
         
-        let local_stmt = recursive(|stmt| {
+        let local_stmt =  || recursive(|stmt| {
             let block = block_help(stmt.clone(), open_curly_bracket, close_curly_bracket);
 
             let x_statment = |name| keyword(name).padded()
                 .ignore_then(
-                    expr.clone()
+                    expr()
                     .delimited_by(open_bracket, close_bracket)
                 )
                 .then(block.clone());
@@ -175,11 +175,11 @@ pub mod c2bf {
             let assignment = ident.clone()
                 .then(
                     just('=').padded()
-                    .ignore_then(expr.clone())
+                    .ignore_then(expr())
                 )
                 .then_ignore(sep);
             choice((
-                declaration.clone()
+                declaration()
                     .map(|(((ty, name), arr), exp)|
                         LStmt::Dec(ty, name, arr, exp)),
                 x_statment("while")
@@ -194,24 +194,24 @@ pub mod c2bf {
                 func_dec.clone()
                     .map(|(((ty,name ), params), body)|
                         LStmt::FuncDec(ty, name, params.into_iter().map(|((ty, name), arr)| (ty, name, arr)).collect(), body)),
-                expr.clone()
+                expr()
                     .map(LStmt::Expr),
                 assignment
                     .map(|(name, exp)|
                         LStmt::Assignment(name, exp)),
             ))
         });
-        let global_stmts = choice((
-            declaration.clone()
+        let global_stmts = || choice((
+            declaration()
                 .map(|(((ty, name), arr), exp)|
                     GStmt::VarDec(ty, name, arr, exp)),
-            func_dec_help(local_stmt)
+            func_dec_help.clone()(local_stmt())
                 .map(|(((ty,name ), params), body)|
                     GStmt::FuncDec(ty, name, params.into_iter().map(|((ty, name), arr)| (ty, name, arr)).collect(), body)),
         ))
         .repeated()
         .collect::<Vec<GStmt>>();
-        global_stmts
+        global_stmts()
     }
 
     #[cfg(test)]
