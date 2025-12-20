@@ -24,7 +24,7 @@ pub mod ast {
         Inc(Box<Self>),
         Dec(Box<Self>),
 
-        Call(&'src str, Vec<Self>),
+        Call(Box<Self>, Vec<Self>),
         Assignment(Atom<'src>, Box<Self>),
     }
 
