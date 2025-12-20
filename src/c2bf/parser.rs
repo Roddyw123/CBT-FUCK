@@ -371,6 +371,32 @@ pub mod parser {
             assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", vec![(Type::Char, "a", None), (Type::Char, "b", None)], Vec::new())]));
         }
 
+        // Bad Global Statements
+
+        #[test]
+        fn global_expression_fail_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("e;").into_result();
+            assert!(stmts.is_err());
+        }
+
+        #[test]
+        fn global_if_fail_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("if(e){}else{}").into_result();
+            assert!(stmts.is_err());
+        }
+
+        #[test]
+        fn global_while_fail_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("while(e){}").into_result();
+            assert!(stmts.is_err());
+        }
+
+        #[test]
+        fn global_for_fail_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse("for(e;e;e){}").into_result();
+            assert!(stmts.is_err());
+        }
+
         // Local Statement Tests
 
         #[test]
