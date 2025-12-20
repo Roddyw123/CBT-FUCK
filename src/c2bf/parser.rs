@@ -158,9 +158,7 @@ pub mod parser {
                     declaration().map(|(((ty, name), arr), exp)| LStmt::VarDec(ty, name, arr, exp)),
                     x_statment("while").map(|(cond, body)| LStmt::While(cond, body)),
                     if_statment.map(|((e1, e2), else_tail)| LStmt::Ifs(e1, e2, else_tail)),
-                    for_loop.map(|(((e1, e2), e3), body)| {
-                        LStmt::For(e1, e2, e3, body)
-                    }),
+                    for_loop.map(|(((e1, e2), e3), body)| LStmt::For(e1, e2, e3, body)),
                     func_dec.clone().map(|(((ty, name), params), body)| {
                         LStmt::FuncDec(
                             ty,
@@ -863,12 +861,15 @@ pub mod parser {
                     "foo",
                     Vec::new(),
                     vec![LStmt::For(
-                        Some(Expr::Assignment(Atom::Var("i"), Box::new(Expr::Atom(Atom::Var("e"))))),
+                        Some(Expr::Assignment(
+                            Atom::Var("i"),
+                            Box::new(Expr::Atom(Atom::Var("e")))
+                        )),
                         Some(Expr::Atom(Atom::Var("i"))),
                         Some(Expr::Assignment(
                             Atom::Var("i"),
-                            Box::new(Expr::Atom(Atom::Var("i"))))
-                        ),
+                            Box::new(Expr::Atom(Atom::Var("i")))
+                        )),
                         Vec::new()
                     )]
                 )])
@@ -893,12 +894,7 @@ pub mod parser {
                     Type::Char,
                     "foo",
                     Vec::new(),
-                    vec![LStmt::For(
-                        None,
-                        None,
-                        None,
-                        Vec::new()
-                    )]
+                    vec![LStmt::For(None, None, None, Vec::new())]
                 )])
             );
         }
@@ -927,6 +923,29 @@ pub mod parser {
                         None,
                         Vec::new()
                     )]
+                )])
+            );
+        }
+
+        #[test]
+        fn local_function_declaration_test() {
+            let stmts = parser::<&str, Err<Cheap>>()
+                .parse(
+                    r#"
+                char foo(){
+                    char bar() {
+                    }
+                }
+                "#,
+                )
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::FuncDec(
+                    Type::Char,
+                    "foo",
+                    Vec::new(),
+                    vec![LStmt::FuncDec(Type::Char, "bar", Vec::new(), Vec::new())]
                 )])
             );
         }
