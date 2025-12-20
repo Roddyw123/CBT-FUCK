@@ -60,7 +60,8 @@ pub mod parser {
             })
         };
 
-        let types = || choice((keyword("char").to(Type::Char), keyword("int").to(Type::Int)));
+        let types =
+            || choice((keyword("char").to(Type::Char), keyword("int").to(Type::Int))).padded();
 
         let typed_variable = || {
             types().then(ident()).then(
@@ -192,7 +193,7 @@ pub mod parser {
             .allow_leading()
             .collect::<Vec<GStmt>>()
         };
-        global_stmts()
+        global_stmts().padded()
     }
 
     #[cfg(test)]
@@ -204,6 +205,18 @@ pub mod parser {
         #[test]
         fn empty_test() {
             let stmts = parser::<&str, Err<EmptyErr>>().parse("").into_result();
+            assert_eq!(stmts, Ok(Vec::new()));
+        }
+
+        #[test]
+        fn whitespace_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse(" ").into_result();
+            assert_eq!(stmts, Ok(Vec::new()));
+        }
+
+        #[test]
+        fn whitespace_preceeding_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>().parse(" ;").into_result();
             assert_eq!(stmts, Ok(Vec::new()));
         }
 
