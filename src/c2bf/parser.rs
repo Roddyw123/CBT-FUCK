@@ -6,6 +6,7 @@ pub mod parser {
         error::{Cheap, EmptyErr},
         extra::{Err, ParserExtra},
         input::Input,
+        pratt::*,
         prelude::{choice, just, recursive},
         text::{self, ascii::keyword},
         IterParser, Parser,
@@ -49,15 +50,24 @@ pub mod parser {
                     })
                 };
 
-                // TODO: change into pratt parser
                 let assignment =
                     atom().then(just('=').padded().ignore_then(expr.clone()).map(Box::new));
-
+                
+                // TODO: add prefix operator parsing
+                
                 choice((
                     assignment.map(|(name, exp)| Expr::Assignment(name, exp)),
                     atom().map(Expr::Atom),
                     expr.clone().delimited_by(open_bracket(), close_bracket()),
                 ))
+
+                // TODO: add pratt parser
+                // .pratt((
+                //     infix(left(10), just('*').padded(), |x, e1, y, e| {
+                    //         Expr::Mul(Box::new(x), Box::new(y))
+                //     }),
+                // ))
+                //TODO: then fold with postfix operators
             })
         };
 
@@ -946,6 +956,38 @@ pub mod parser {
                     "foo",
                     Vec::new(),
                     vec![LStmt::FuncDec(Type::Char, "bar", Vec::new(), Vec::new())]
+                )])
+            );
+        }
+
+        #[test]
+        fn numeric_literal_expression_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = 15;")
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Atom(Atom::Num(15)))
+                )])
+            );
+        }
+
+        #[test]
+        fn parenthesized_expression_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = (v);")
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Atom(Atom::Var("v")))
                 )])
             );
         }
