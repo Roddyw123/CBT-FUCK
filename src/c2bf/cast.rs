@@ -43,9 +43,9 @@ pub mod ast {
             Option<Vec<LStmt<'src>>>,
         ),
         For(
-            Option<Box<LStmt<'src>>>,
-            Option<Box<LStmt<'src>>>,
-            Option<Box<LStmt<'src>>>,
+            Option<Expr<'src>>,
+            Option<Expr<'src>>,
+            Option<Expr<'src>>,
             Vec<LStmt<'src>>,
         ),
         FuncDec(

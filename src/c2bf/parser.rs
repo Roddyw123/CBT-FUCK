@@ -14,6 +14,7 @@ pub mod parser {
     pub fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>(
     ) -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Cheap>> {
         // not mapped to Var immediatly as it can be a function as well
+        // TODO: proper identifier parsing (regex probably)
         let ident = || text::ascii::ident().padded();
 
         let num = || text::int(10).padded();
@@ -141,12 +142,14 @@ pub mod parser {
                 let for_loop = keyword("for")
                     .padded()
                     .ignore_then(
-                        stmt.clone()
+                        // TODO: accept empty parts
+                        // TODO: accept declarations in first part
+                        expr()
                             .or_not()
                             .then_ignore(sep())
-                            .then(stmt.clone().or_not())
+                            .then(expr().or_not())
                             .then_ignore(sep())
-                            .then(stmt.clone().or_not())
+                            .then(expr().or_not())
                             .delimited_by(open_bracket(), close_bracket()),
                     )
                     .then(block.clone());
@@ -156,7 +159,7 @@ pub mod parser {
                     x_statment("while").map(|(cond, body)| LStmt::While(cond, body)),
                     if_statment.map(|((e1, e2), else_tail)| LStmt::Ifs(e1, e2, else_tail)),
                     for_loop.map(|(((e1, e2), e3), body)| {
-                        LStmt::For(e1.map(Box::new), e2.map(Box::new), e3.map(Box::new), body)
+                        LStmt::For(e1, e2, e3, body)
                     }),
                     func_dec.clone().map(|(((ty, name), params), body)| {
                         LStmt::FuncDec(
@@ -713,6 +716,217 @@ pub mod parser {
                     "foo",
                     Vec::new(),
                     Vec::new()
+                )])
+            );
+        }
+
+        // Local Expression Tests
+        #[test]
+        fn local_expression_test() {
+            let stmts = parser::<&str, Err<Cheap>>()
+                .parse("char foo(){e;}")
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::FuncDec(
+                    Type::Char,
+                    "foo",
+                    Vec::new(),
+                    vec![LStmt::Expr(Expr::Atom(Atom::Var("e")))]
+                )])
+            );
+        }
+
+        #[test]
+        fn local_if_test() {
+            let stmts = parser::<&str, Err<Cheap>>()
+                .parse(
+                    r#"
+                char foo(){
+                    if (e) {
+                    }
+                }
+                "#,
+                )
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::FuncDec(
+                    Type::Char,
+                    "foo",
+                    Vec::new(),
+                    vec![LStmt::Ifs(
+                        (Expr::Atom(Atom::Var("e")), Vec::new()),
+                        Vec::new(),
+                        None
+                    )]
+                )])
+            );
+        }
+
+        #[test]
+        fn local_if_else_test() {
+            let stmts = parser::<&str, Err<Cheap>>()
+                .parse(
+                    r#"
+                char foo(){
+                    if (e) {
+                    } else {
+                    }
+                }
+                "#,
+                )
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::FuncDec(
+                    Type::Char,
+                    "foo",
+                    Vec::new(),
+                    vec![LStmt::Ifs(
+                        (Expr::Atom(Atom::Var("e")), Vec::new()),
+                        Vec::new(),
+                        Some(Vec::new())
+                    )]
+                )])
+            );
+        }
+
+        #[test]
+        fn local_if_else_if_test() {
+            let stmts = parser::<&str, Err<Cheap>>()
+                .parse(
+                    r#"
+                char foo(){
+                    if (e) {
+                    } else if (e) {
+                    } else {
+                    }
+                }
+                "#,
+                )
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::FuncDec(
+                    Type::Char,
+                    "foo",
+                    Vec::new(),
+                    vec![LStmt::Ifs(
+                        (Expr::Atom(Atom::Var("e")), Vec::new()),
+                        vec![(Expr::Atom(Atom::Var("e")), Vec::new())],
+                        Some(Vec::new())
+                    )]
+                )])
+            );
+        }
+
+        #[test]
+        fn local_while_test() {
+            let stmts = parser::<&str, Err<Cheap>>()
+                .parse(
+                    r#"
+                char foo(){
+                    while (e) {
+                    }
+                }
+                "#,
+                )
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::FuncDec(
+                    Type::Char,
+                    "foo",
+                    Vec::new(),
+                    vec![LStmt::While(Expr::Atom(Atom::Var("e")), Vec::new())]
+                )])
+            );
+        }
+
+        #[test]
+        fn local_for_test() {
+            let stmts = parser::<&str, Err<Cheap>>()
+                .parse(
+                    r#"
+                char foo(){
+                    for (i = e; i; i = i) {
+                    }
+                }
+                "#,
+                )
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::FuncDec(
+                    Type::Char,
+                    "foo",
+                    Vec::new(),
+                    vec![LStmt::For(
+                        Some(Expr::Assignment(Atom::Var("i"), Box::new(Expr::Atom(Atom::Var("e"))))),
+                        Some(Expr::Atom(Atom::Var("i"))),
+                        Some(Expr::Assignment(
+                            Atom::Var("i"),
+                            Box::new(Expr::Atom(Atom::Var("i"))))
+                        ),
+                        Vec::new()
+                    )]
+                )])
+            );
+        }
+
+        #[test]
+        fn local_for_empty_test() {
+            let stmts = parser::<&str, Err<Cheap>>()
+                .parse(
+                    r#"
+                char foo(){
+                    for ( ; ;) {
+                    }
+                }
+                "#,
+                )
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::FuncDec(
+                    Type::Char,
+                    "foo",
+                    Vec::new(),
+                    vec![LStmt::For(
+                        None,
+                        None,
+                        None,
+                        Vec::new()
+                    )]
+                )])
+            );
+        }
+
+        #[test]
+        fn local_for_partially_empty_test() {
+            let stmts = parser::<&str, Err<Cheap>>()
+                .parse(
+                    r#"
+                char foo(){
+                    for ( ;e ;) {
+                    }
+                }
+                "#,
+                )
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::FuncDec(
+                    Type::Char,
+                    "foo",
+                    Vec::new(),
+                    vec![LStmt::For(
+                        None,
+                        Some(Expr::Atom(Atom::Var("e"))),
+                        None,
+                        Vec::new()
+                    )]
                 )])
             );
         }
