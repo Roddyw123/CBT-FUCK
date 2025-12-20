@@ -18,14 +18,14 @@ pub mod ast {
         Neg(Box<Self>),
         Add(Box<Self>, Box<Self>),
         Mul(Box<Self>, Box<Self>),
-        Le(Box<Self>, Box<Self>),
-        Ge(Box<Self>, Box<Self>),
+        Lt(Box<Self>, Box<Self>),
+        Gt(Box<Self>, Box<Self>),
         Eq(Box<Self>, Box<Self>),
         Inc(Box<Self>),
         Dec(Box<Self>),
 
         Call(Box<Self>, Vec<Self>),
-        Assignment(Atom<'src>, Box<Self>),
+        Assignment(Box<Self>, Box<Self>),
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]

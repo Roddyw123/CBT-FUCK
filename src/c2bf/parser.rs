@@ -50,26 +50,33 @@ pub mod parser {
                     })
                 };
 
-                let assignment =
-                    atom().then(just('=').padded().ignore_then(expr.clone()).map(Box::new));
-
                 choice((
-                    assignment.map(|(name, exp)| Expr::Assignment(name, exp)),
                     atom().map(Expr::Atom),
                     expr.clone().delimited_by(open_bracket(), close_bracket()),
-                    // TODO: proper precedence accounting between prefix and postfix operations
-                    just('!')
-                        .padded()
-                        .ignore_then(expr.clone())
-                        .map(|exp| Expr::Neg(Box::new(exp))),
                 ))
-
-                // TODO: add pratt parser
-                // .pratt((
-                //     infix(left(10), just('*').padded(), |x, e1, y, e| {
-                //         Expr::Mul(Box::new(x), Box::new(y))
-                //     }),
-                // ))
+                .pratt((
+                    prefix(14, just('!').padded(), |e1, x, e| {
+                        Expr::Neg(Box::new(x))
+                    }),
+                    infix(left(13), just('*').padded(), |x, e1, y, e| {
+                        Expr::Mul(Box::new(x), Box::new(y))
+                    }),
+                    infix(left(12), just('+').padded(), |x, e1, y, e| {
+                        Expr::Add(Box::new(x), Box::new(y))
+                    }),
+                    infix(left(10), just('<').padded(), |x, e1, y, e| {
+                        Expr::Lt(Box::new(x), Box::new(y))
+                    }),
+                    infix(left(10), just('>').padded(), |x, e1, y, e| {
+                        Expr::Gt(Box::new(x), Box::new(y))
+                    }),
+                    infix(left(9), just("==").padded(), |x, e1, y, e| {
+                        Expr::Eq(Box::new(x), Box::new(y))
+                    }),
+                    infix(right(2), just("=").padded(), |x, e1, y, e| {
+                        Expr::Assignment(Box::new(x), Box::new(y))
+                    }),
+                ))
                 //TODO: then fold with postfix operators
             })
         };
@@ -663,7 +670,7 @@ pub mod parser {
                     "foo",
                     Vec::new(),
                     vec![LStmt::Expr(Expr::Assignment(
-                        Atom::Var("e"),
+                        Box::new(Expr::Atom(Atom::Var("e"))),
                         Box::new(Expr::Atom(Atom::Var("v")))
                     ))]
                 )])
@@ -875,12 +882,12 @@ pub mod parser {
                     Vec::new(),
                     vec![LStmt::For(
                         Some(Expr::Assignment(
-                            Atom::Var("i"),
+                            Box::new(Expr::Atom(Atom::Var("i"))),
                             Box::new(Expr::Atom(Atom::Var("e")))
                         )),
                         Some(Expr::Atom(Atom::Var("i"))),
                         Some(Expr::Assignment(
-                            Atom::Var("i"),
+                            Box::new(Expr::Atom(Atom::Var("i"))),
                             Box::new(Expr::Atom(Atom::Var("i")))
                         )),
                         Vec::new()
@@ -1025,6 +1032,495 @@ pub mod parser {
                     Some(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Atom(
                         Atom::Var("v")
                     ))))))
+                )])
+            );
+        }
+
+        #[test]
+        fn add_expressions_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = u + v;")
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Add(
+                        Box::new(Expr::Atom(Atom::Var("u"))),
+                        Box::new(Expr::Atom(Atom::Var("v")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn multiply_expressions_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = u * v;")
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Mul(
+                        Box::new(Expr::Atom(Atom::Var("u"))),
+                        Box::new(Expr::Atom(Atom::Var("v")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn less_than_expressions_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = u < v;")
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Lt(
+                        Box::new(Expr::Atom(Atom::Var("u"))),
+                        Box::new(Expr::Atom(Atom::Var("v")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn greater_than_expressions_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = u > v;")
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Gt(
+                        Box::new(Expr::Atom(Atom::Var("u"))),
+                        Box::new(Expr::Atom(Atom::Var("v")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn equal_expressions_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = u == v;")
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Eq(
+                        Box::new(Expr::Atom(Atom::Var("u"))),
+                        Box::new(Expr::Atom(Atom::Var("v")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn assign_expressions_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = u = v;")
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Assignment(
+                        Box::new(Expr::Atom(Atom::Var("u"))),
+                        Box::new(Expr::Atom(Atom::Var("v")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn negation_binds_tighter_than_multiplication() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = !a * b;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Mul(
+                        Box::new(Expr::Neg(Box::new(Expr::Atom(Atom::Var("a"))))),
+                        Box::new(Expr::Atom(Atom::Var("b")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn double_negation_with_comparison() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = !!a < b;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Lt(
+                            Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(
+                                Expr::Atom(Atom::Var("a"))
+                            ))))),
+                            Box::new(Expr::Atom(Atom::Var("b")))
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn brackets_override_negation_binding() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = !(a + b) * c;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Mul(
+                            Box::new(
+                                Expr::Neg(Box::new(
+                                    Expr::Add(
+                                        Box::new(Expr::Atom(Atom::Var("a"))),
+                                        Box::new(Expr::Atom(Atom::Var("b")))
+                                    )
+                                ))
+                            ),
+                            Box::new(Expr::Atom(Atom::Var("c")))
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn mul_has_higher_precedence_than_add() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = a + b * c;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Add(
+                        Box::new(Expr::Atom(Atom::Var("a"))),
+                        Box::new(Expr::Mul(
+                            Box::new(Expr::Atom(Atom::Var("b"))),
+                            Box::new(Expr::Atom(Atom::Var("c")))
+                        ))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn bracket_overrides_mul_precedence() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = (a + b) * c;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Mul(
+                        Box::new(Expr::Add(
+                            Box::new(Expr::Atom(Atom::Var("a"))),
+                            Box::new(Expr::Atom(Atom::Var("b")))
+                        )),
+                        Box::new(Expr::Atom(Atom::Var("c")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn add_has_higher_precedence_than_less_than() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = a + b < c;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Lt(
+                        Box::new(Expr::Add(
+                            Box::new(Expr::Atom(Atom::Var("a"))),
+                            Box::new(Expr::Atom(Atom::Var("b")))
+                        )),
+                        Box::new(Expr::Atom(Atom::Var("c")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn bracket_overrides_comparison_precedence() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = a + (b < c);")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Add(
+                        Box::new(Expr::Atom(Atom::Var("a"))),
+                        Box::new(Expr::Lt(
+                            Box::new(Expr::Atom(Atom::Var("b"))),
+                            Box::new(Expr::Atom(Atom::Var("c")))
+                        ))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn comparison_has_higher_precedence_than_equality() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = a < b == c;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Eq(
+                        Box::new(Expr::Lt(
+                            Box::new(Expr::Atom(Atom::Var("a"))),
+                            Box::new(Expr::Atom(Atom::Var("b")))
+                        )),
+                        Box::new(Expr::Atom(Atom::Var("c")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn bracket_overrides_equality_precedence() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = a < (b == c);")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Lt(
+                        Box::new(Expr::Atom(Atom::Var("a"))),
+                        Box::new(Expr::Eq(
+                            Box::new(Expr::Atom(Atom::Var("b"))),
+                            Box::new(Expr::Atom(Atom::Var("c")))
+                        ))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn equality_has_higher_precedence_than_assignment() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = a == b = c;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Assignment(
+                        Box::new(Expr::Eq(
+                            Box::new(Expr::Atom(Atom::Var("a"))),
+                            Box::new(Expr::Atom(Atom::Var("b")))
+                        )),
+                        Box::new(Expr::Atom(Atom::Var("c")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn bracket_overrides_assignment_precedence() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = a = (b == c);")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Assignment(
+                        Box::new(Expr::Atom(Atom::Var("a"))),
+                        Box::new(Expr::Eq(
+                            Box::new(Expr::Atom(Atom::Var("b"))),
+                            Box::new(Expr::Atom(Atom::Var("c")))
+                        ))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn addition_is_left_associative() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = a + b + c;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Add(
+                        Box::new(Expr::Add(
+                            Box::new(Expr::Atom(Atom::Var("a"))),
+                            Box::new(Expr::Atom(Atom::Var("b")))
+                        )),
+                        Box::new(Expr::Atom(Atom::Var("c")))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn assignment_is_right_associative() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = a = b = c;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Assignment(
+                        Box::new(Expr::Atom(Atom::Var("a"))),
+                        Box::new(Expr::Assignment(
+                            Box::new(Expr::Atom(Atom::Var("b"))),
+                            Box::new(Expr::Atom(Atom::Var("c")))
+                        ))
+                    ))
+                )])
+            );
+        }
+
+        #[test]
+        fn full_precedence_stress_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char r = a = !!b + c * !d < e == !(f = g + !h);")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "r",
+                    None,
+                    Some(
+                        // a = ...
+                        Expr::Assignment(
+                            Box::new(Expr::Atom(Atom::Var("a"))),
+                            Box::new(
+                                // (...) == !(...)
+                                Expr::Eq(
+                                    Box::new(
+                                        // (!!b + (c * !d)) < e
+                                        Expr::Lt(
+                                            Box::new(
+                                                Expr::Add(
+                                                    Box::new(
+                                                        Expr::Neg(Box::new(
+                                                            Expr::Neg(Box::new(
+                                                                Expr::Atom(Atom::Var("b"))
+                                                            ))
+                                                        ))
+                                                    ),
+                                                    Box::new(
+                                                        Expr::Mul(
+                                                            Box::new(Expr::Atom(Atom::Var("c"))),
+                                                            Box::new(
+                                                                Expr::Neg(Box::new(
+                                                                    Expr::Atom(Atom::Var("d"))
+                                                                ))
+                                                            )
+                                                        )
+                                                    )
+                                                )
+                                            ),
+                                            Box::new(Expr::Atom(Atom::Var("e")))
+                                        )
+                                    ),
+                                    Box::new(
+                                        // !(f = g + !h)
+                                        Expr::Neg(Box::new(
+                                            Expr::Assignment(
+                                                Box::new(Expr::Atom(Atom::Var("f"))),
+                                                Box::new(
+                                                    Expr::Add(
+                                                        Box::new(Expr::Atom(Atom::Var("g"))),
+                                                        Box::new(
+                                                            Expr::Neg(Box::new(
+                                                                Expr::Atom(Atom::Var("h"))
+                                                            ))
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                        ))
+                                    )
+                                )
+                            )
+                        )
+                    )
                 )])
             );
         }
