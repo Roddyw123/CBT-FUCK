@@ -2,7 +2,7 @@ pub mod ast {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum Type {
         Char,
-        Int
+        Int,
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,7 +11,7 @@ pub mod ast {
         Var(&'src str),
         Array(Box<Atom<'src>>, Box<Expr<'src>>),
     }
-    
+
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum Expr<'src> {
         Atom(Atom<'src>),
@@ -23,24 +23,53 @@ pub mod ast {
         Eq(Box<Expr<'src>>, Box<Expr<'src>>),
         Inc(Box<Expr<'src>>),
         Dec(Box<Expr<'src>>),
-        
+
         Call(&'src str, Vec<Expr<'src>>),
         Assignment(Atom<'src>, Box<Expr<'src>>),
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum LStmt<'src> {
-        VarDec(Type, &'src str, Option<Option<Expr<'src>>>, Option<Expr<'src>>),
+        VarDec(
+            Type,
+            &'src str,
+            Option<Option<Expr<'src>>>,
+            Option<Expr<'src>>,
+        ),
         While(Expr<'src>, Vec<LStmt<'src>>),
-        Ifs((Expr<'src>, Vec<LStmt<'src>>), Vec<(Expr<'src>, Vec<LStmt<'src>>)>, Option<Vec<LStmt<'src>>>),
-        For(Option<Box<LStmt<'src>>>, Option<Box<LStmt<'src>>>, Option<Box<LStmt<'src>>>, Vec<LStmt<'src>>),
-        FuncDec(Type, &'src str, Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>, Vec<LStmt<'src>>),
+        Ifs(
+            (Expr<'src>, Vec<LStmt<'src>>),
+            Vec<(Expr<'src>, Vec<LStmt<'src>>)>,
+            Option<Vec<LStmt<'src>>>,
+        ),
+        For(
+            Option<Box<LStmt<'src>>>,
+            Option<Box<LStmt<'src>>>,
+            Option<Box<LStmt<'src>>>,
+            Vec<LStmt<'src>>,
+        ),
+        FuncDec(
+            Type,
+            &'src str,
+            Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>,
+            Vec<LStmt<'src>>,
+        ),
         Expr(Expr<'src>),
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum GStmt<'src> {
-        VarDec(Type, &'src str, Option<Option<Expr<'src>>>, Option<Expr<'src>>),
-        FuncDec(Type, &'src str, Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>, Vec<LStmt<'src>>),
+        VarDec(
+            Type,
+            &'src str,
+            Option<Option<Expr<'src>>>,
+            Option<Expr<'src>>,
+        ),
+        FuncDec(
+            Type,
+            &'src str,
+            Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>,
+            Vec<LStmt<'src>>,
+        ),
     }
 }
