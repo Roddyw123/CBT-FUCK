@@ -52,19 +52,26 @@ pub mod parser {
 
                 let assignment =
                     atom().then(just('=').padded().ignore_then(expr.clone()).map(Box::new));
-                
+
                 // TODO: add prefix operator parsing
-                
-                choice((
-                    assignment.map(|(name, exp)| Expr::Assignment(name, exp)),
-                    atom().map(Expr::Atom),
-                    expr.clone().delimited_by(open_bracket(), close_bracket()),
-                ))
+                just('!')
+                    .padded()
+                    .to(|x| Expr::Neg(Box::new(x)))
+                    .or_not()
+                    .then(choice((
+                        assignment.map(|(name, exp)| Expr::Assignment(name, exp)),
+                        atom().map(Expr::Atom),
+                        expr.clone().delimited_by(open_bracket(), close_bracket()),
+                    )))
+                    .map(|e| match e {
+                        (Some(f), exp) => f(exp),
+                        (None, exp) => exp,
+                    })
 
                 // TODO: add pratt parser
                 // .pratt((
                 //     infix(left(10), just('*').padded(), |x, e1, y, e| {
-                    //         Expr::Mul(Box::new(x), Box::new(y))
+                //         Expr::Mul(Box::new(x), Box::new(y))
                 //     }),
                 // ))
                 //TODO: then fold with postfix operators
@@ -988,6 +995,22 @@ pub mod parser {
                     "e",
                     None,
                     Some(Expr::Atom(Atom::Var("v")))
+                )])
+            );
+        }
+
+        #[test]
+        fn negate_expression_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = !v;")
+                .into_result();
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(Expr::Neg(Box::new(Expr::Atom(Atom::Var("v")))))
                 )])
             );
         }
