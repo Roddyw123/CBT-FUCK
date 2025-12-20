@@ -1,6 +1,6 @@
 pub mod parser {
     
-    use chumsky::{IterParser, Parser, error::{EmptyErr, Cheap}, extra::{Err, ParserExtra}, input::Input, prelude::{choice, just, recursive}, text::{self, ascii::keyword}};
+    use chumsky::{IterParser, Parser, container::OrderedSeq, error::{Cheap, EmptyErr}, extra::{Err, ParserExtra}, input::Input, prelude::{choice, just, recursive}, text::{self, ascii::keyword}};
     use super::super::cast::ast::*;
 
     pub fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Cheap>> {
@@ -89,9 +89,13 @@ pub mod parser {
             S: Parser<'src, I, LStmt<'src>, E> + Clone,
             O: Parser<'src, I, char, E> + Clone,
             C: Parser<'src, I, char, E> + Clone,
+            <I as Input<'src>>::Token: PartialEq,
+            char: OrderedSeq<'src, <I as Input<'src>>::Token>,
         {
-            stmt.clone()
-            .repeated()
+            stmt
+            .separated_by(just(';').repeated())
+            .allow_trailing()
+            .allow_leading()
             .collect::<Vec<LStmt<'src>>>()
             .delimited_by(open, close)
         }
@@ -463,6 +467,18 @@ pub mod parser {
         fn local_char_variable_declaration_assignment_missing_semicolon_fail_test() {
             let stmts = parser::<&str, Err<Cheap>>().parse("char foo(){char e = v}").into_result();
             assert!(stmts.is_err());
+        }
+
+        #[test]
+        fn local_empty_line_test() {
+            let stmts = parser::<&str, Err<Cheap>>().parse("char foo(){;}").into_result();
+            assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", Vec::new(), Vec::new())]));
+        }
+
+        #[test]
+        fn local_empty_lines_test() {
+            let stmts = parser::<&str, Err<Cheap>>().parse("char foo(){;;}").into_result();
+            assert_eq!(stmts, Ok(vec![GStmt::FuncDec(Type::Char, "foo", Vec::new(), Vec::new())]));
         }
     }
 }
