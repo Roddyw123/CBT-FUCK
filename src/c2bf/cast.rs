@@ -9,23 +9,23 @@ pub mod ast {
     pub enum Atom<'src> {
         Num(u32),
         Var(&'src str),
-        Array(Box<Atom<'src>>, Box<Expr<'src>>),
+        Array(Box<Self>, Box<Expr<'src>>),
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum Expr<'src> {
         Atom(Atom<'src>),
-        Neg(Box<Expr<'src>>),
-        Add(Box<Expr<'src>>, Box<Expr<'src>>),
-        Mul(Box<Expr<'src>>, Box<Expr<'src>>),
-        Le(Box<Expr<'src>>, Box<Expr<'src>>),
-        Ge(Box<Expr<'src>>, Box<Expr<'src>>),
-        Eq(Box<Expr<'src>>, Box<Expr<'src>>),
-        Inc(Box<Expr<'src>>),
-        Dec(Box<Expr<'src>>),
+        Neg(Box<Self>),
+        Add(Box<Self>, Box<Self>),
+        Mul(Box<Self>, Box<Self>),
+        Le(Box<Self>, Box<Self>),
+        Ge(Box<Self>, Box<Self>),
+        Eq(Box<Self>, Box<Self>),
+        Inc(Box<Self>),
+        Dec(Box<Self>),
 
-        Call(&'src str, Vec<Expr<'src>>),
-        Assignment(Atom<'src>, Box<Expr<'src>>),
+        Call(&'src str, Vec<Self>),
+        Assignment(Atom<'src>, Box<Self>),
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,23 +36,23 @@ pub mod ast {
             Option<Option<Expr<'src>>>,
             Option<Expr<'src>>,
         ),
-        While(Expr<'src>, Vec<LStmt<'src>>),
+        While(Expr<'src>, Vec<Self>),
         Ifs(
-            (Expr<'src>, Vec<LStmt<'src>>),
-            Vec<(Expr<'src>, Vec<LStmt<'src>>)>,
-            Option<Vec<LStmt<'src>>>,
+            (Expr<'src>, Vec<Self>),
+            Vec<(Expr<'src>, Vec<Self>)>,
+            Option<Vec<Self>>,
         ),
         For(
             Option<Expr<'src>>,
             Option<Expr<'src>>,
             Option<Expr<'src>>,
-            Vec<LStmt<'src>>,
+            Vec<Self>,
         ),
         FuncDec(
             Type,
             &'src str,
             Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>,
-            Vec<LStmt<'src>>,
+            Vec<Self>,
         ),
         Expr(Expr<'src>),
     }
