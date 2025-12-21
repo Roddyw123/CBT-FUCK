@@ -1,0 +1,247 @@
+---
+---
+
+@import "{{ site.theme }}";
+
+/* Professional Custom Styling for CBT-FUCK Documentation */
+
+/* Color Palette */
+:root {
+  --primary-color: #2c3e50;
+  --secondary-color: #3498db;
+  --accent-color: #e74c3c;
+  --text-color: #333;
+  --light-bg: #f8f9fa;
+  --border-color: #dee2e6;
+  --code-bg: #f5f5f5;
+  --link-color: #2980b9;
+  --link-hover: #1a5c8b;
+}
+
+/* Global Improvements */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.7;
+  color: var(--text-color);
+  font-size: 16px;
+}
+
+.page-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 3rem 1rem;
+}
+
+.project-name {
+  font-weight: 700;
+  font-size: 3rem;
+  letter-spacing: -0.5px;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+
+.project-tagline {
+  font-weight: 400;
+  opacity: 0.95;
+  font-size: 1.2rem;
+}
+
+/* Main Content Styling */
+.main-content {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+/* Headings */
+.main-content h1 {
+  color: var(--primary-color);
+  border-bottom: 3px solid var(--secondary-color);
+  padding-bottom: 0.5rem;
+  margin-top: 2.5rem;
+  margin-bottom: 1.5rem;
+  font-weight: 700;
+  font-size: 2.2rem;
+}
+
+.main-content h2 {
+  color: var(--primary-color);
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 0.4rem;
+  margin-top: 2rem;
+  margin-bottom: 1.2rem;
+  font-weight: 600;
+  font-size: 1.8rem;
+}
+
+.main-content h3 {
+  color: #444;
+  margin-top: 1.8rem;
+  margin-bottom: 1rem;
+  font-weight: 600;
+  font-size: 1.4rem;
+}
+
+/* Links */
+.main-content a {
+  color: var(--link-color);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: all 0.3s ease;
+  font-weight: 500;
+}
+
+.main-content a:hover {
+  color: var(--link-hover);
+  border-bottom-color: var(--link-hover);
+}
+
+/* Navigation Links - Special styling for documentation links */
+.main-content ul li a {
+  display: inline-block;
+  padding: 0.3rem 0;
+  position: relative;
+}
+
+.main-content ul li a strong {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.main-content ul li a:hover strong {
+  color: var(--secondary-color);
+}
+
+/* Code Blocks */
+.main-content pre {
+  background-color: var(--code-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1.2rem;
+  overflow-x: auto;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.main-content code {
+  background-color: var(--code-bg);
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9em;
+  color: #d73a49;
+}
+
+.main-content pre code {
+  background-color: transparent;
+  padding: 0;
+  color: inherit;
+  border-radius: 0;
+}
+
+/* Horizontal Rules */
+.main-content hr {
+  border: 0;
+  border-top: 2px solid #e0e0e0;
+  margin: 2.5rem 0;
+}
+
+/* Lists */
+.main-content ul {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.main-content ul li {
+  margin-bottom: 0.8rem;
+  line-height: 1.6;
+}
+
+/* Blockquotes */
+.main-content blockquote {
+  border-left: 4px solid var(--secondary-color);
+  background-color: var(--light-bg);
+  padding: 1rem 1.5rem;
+  margin: 1.5rem 0;
+  border-radius: 0 4px 4px 0;
+}
+
+/* Tables */
+.main-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5rem 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.main-content table th {
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.8rem;
+  text-align: left;
+  font-weight: 600;
+}
+
+.main-content table td {
+  padding: 0.8rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.main-content table tr:hover {
+  background-color: var(--light-bg);
+}
+
+/* Footer */
+.site-footer {
+  border-top: 2px solid #e0e0e0;
+  padding-top: 2rem;
+  margin-top: 3rem;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+/* Responsive Design */
+@media screen and (max-width: 768px) {
+  .project-name {
+    font-size: 2rem;
+  }
+
+  .project-tagline {
+    font-size: 1rem;
+  }
+
+  .main-content {
+    padding: 1.5rem 1rem;
+  }
+
+  .main-content h1 {
+    font-size: 1.8rem;
+  }
+
+  .main-content h2 {
+    font-size: 1.5rem;
+  }
+}
+
+/* Section Dividers - Makes the documentation sections more distinct */
+.main-content > hr {
+  background: linear-gradient(to right, transparent, var(--secondary-color), transparent);
+  height: 2px;
+  border: none;
+  margin: 3rem 0;
+}
+
+/* Smooth Scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Print Styles */
+@media print {
+  .page-header {
+    background: none;
+    color: black;
+  }
+
+  .main-content a {
+    color: black;
+    text-decoration: underline;
+  }
+}

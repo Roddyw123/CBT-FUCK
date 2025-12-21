@@ -1,22 +1,30 @@
 # Jekyll configuration for GitHub Pages
 
-title: CBT-FUCK Documentation
-description: A bidirectional C ↔ Brainfuck transpiler
-author: Your Name
+# Site Settings
+title: CBT-FUCK
+description: A bidirectional C ↔ Brainfuck transpiler built with a focus on simplicity, correctness, and extensibility
+author: CBT-FUCK Contributors
+lang: en-US
 
-# Theme - GitHub supports these themes out of the box
+# Theme
 theme: jekyll-theme-cayman
-# Other options: jekyll-theme-minimal, jekyll-theme-modernist, jekyll-theme-slate, etc.
 
 # GitHub Pages specific settings
-baseurl: "" # Leave empty if using custom domain
-url: "" # Your GitHub Pages URL
+baseurl: "/CBT-FUCK"
+url: "https://roddyw123.github.io"
+
+# SEO and Social
+github_username: Roddyw123
+repository: Roddyw123/CBT-FUCK
 
 # Markdown settings
 markdown: kramdown
 kramdown:
   input: GFM
   syntax_highlighter: rouge
+  syntax_highlighter_opts:
+    block:
+      line_numbers: false
 
 # Exclude files from being processed
 exclude:
@@ -24,11 +32,32 @@ exclude:
   - Gemfile.lock
   - node_modules
   - vendor
+  - README.md
 
-# Enable navigation
+# Plugins
 plugins:
   - jekyll-relative-links
+  - jekyll-seo-tag
+  - jekyll-sitemap
 
+# Navigation and Links
 relative_links:
   enabled: true
   collections: false
+
+# Show excerpts on pages
+show_excerpts: false
+
+# Collections (if you want to organize content)
+collections:
+  docs:
+    output: true
+    permalink: /:collection/:name
+
+# Default front matter
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: "default"

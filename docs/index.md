@@ -8,8 +8,8 @@ CBT-FUCK is a hobbyist project motivated by unfamiliar compilation targets and d
 
 ## Getting Started
 
-- [**Motivation**](00-motivation.md) - Why this project exists
-- [**Introduction**](01-intro.md) - Understanding Brainfuck and its specification
+- [**Motivation**](00-motivation) - Why this project exists
+- [**Introduction**](01-intro) - Understanding Brainfuck and its specification
 
 ---
 
@@ -18,13 +18,13 @@ CBT-FUCK is a hobbyist project motivated by unfamiliar compilation targets and d
 Learn how Brainfuck source code is translated into equivalent C code:
 
 ### Core Process
-- [**Compilation Process**](02-bf2c_pro.md) - Overview of filtering, parsing, optimization, and code emission
+- [**Compilation Process**](02-bf2c_pro) - Overview of filtering, parsing, optimization, and code emission
 
 ### Optimizations
-- [**Optimization Level 1**](03-bf2c_op1.md) - Local optimizations
-- [**Optimization Level 2**](04-bf2c_op2.md) - Analysis passes for global optimizations
-- [**Optimization Level 3**](05-bf2c_op3.md) - Global optimizations
-- [**Advanced Optimizations**](06-bf2c_advancedOP.md) - Cutting-edge optimization techniques
+- [**Optimization Level 1**](03-bf2c_op1) - Local optimizations
+- [**Optimization Level 2**](04-bf2c_op2) - Analysis passes for global optimizations
+- [**Optimization Level 3**](05-bf2c_op3) - Global optimizations
+- [**Advanced Optimizations**](06-bf2c_advancedOP) - Cutting-edge optimization techniques
 
 ---
 
@@ -32,14 +32,15 @@ Learn how Brainfuck source code is translated into equivalent C code:
 
 Explore the reverse process of translating C code into Brainfuck:
 
-- [**C to Brainfuck Process**](07-c2bf_pro.md) - Overview of the C to Brainfuck compilation pipeline
-- [**Implementation Details**](08-c2bf_imp.md) - Technical implementation and design decisions
+- [**C to Brainfuck Process**](07-c2bf_pro) - Overview of the C to Brainfuck compilation pipeline
+- [**Implementation Details**](08-c2bf_imp) - Technical implementation and design decisions
 
 ---
 
 ## Additional Resources
 
-- [**Credits**](09-credits.md) - Acknowledgments and references
+- [**Conclusion**](09-conc) - Final thoughts and future directions
+- [**Credits**](CREDITS) - Acknowledgments and references
 
 ---
 
@@ -47,4 +48,4 @@ Explore the reverse process of translating C code into Brainfuck:
 
 This is a complete rewrite of CBT, another bidirectional C ↔ Brainfuck transpiler built solely on C.
 
-**Repository:** [CBT-FUCK on GitHub](https://github.com/yourusername/CBT-FUCK)
+**Repository:** [CBT-FUCK on GitHub](https://github.com/Roddyw123/CBT-FUCK)
