@@ -1,49 +1,5 @@
-# C to Brainfuck Compiler
-
-## Introduction
-
-
-## EBNF for C Subset
-
-The EBNF below is a slightly modified version of the C Project version with term added
-
-```C
-
-EBNF Syntax:
-defintion     =
-concatenation ,
-termination   ;
-alternation   |
-optional      []
-repetition    {}
-grouping      ()
-string        ""
-comment       (**)
-regex         //
-
--------------------
-
-ident  = /[A-Za-z][A-Za-z0-9]*/ ;
-nat    = /[0-9]+/ ;
-atom   = ident | nat | "getchar()" ;
-term   = atom , [ ( "*" | "/" ) , atom ] ;
-expr   = "!" , term
-       | term , [ ( ( "==" | ">" | "<" | "+" ) , term )
-                | "++"
-                | "--"
-                ] ;
-stmt   = "char" , ident , ";"
-       | ident , "=" , expr , ";"
-       | "if" , "(" , expr , ")" , "{" , block , "}"
-       | "if" , "(" , expr , ")" , "{" , block , "}" ,
-         "else" , "{" , block , "}"
-       | "while" , "(" , expr , ")" , "{" , block , "}"
-       | "for" , "(" , block , ";" , expr , ";" , block , ")" ,
-         "{" , block , "}"
-       | "putchar" , "(" , atom , ")" , ";"
-       | expr , ";" ;
-block  = stmt , { stmt } ;
-```
+# C to Brainfuck Compilation: Process
+This section describes the process by which C source code is translated into equivalent Brainfuck code under the strict Brainfuck specification defined above. The goal of this compilation process is to produce C code that, when compiled and executed, exhibits behavior observationally equivalent to the execution of the original C program.
 
 ## Components
 
