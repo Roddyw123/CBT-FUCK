@@ -25,6 +25,7 @@ pub mod ast {
         Dec(Box<Self>),
 
         Call(Box<Self>, Vec<Self>),
+        Array(Box<Self>, Box<Self>),
         Assignment(Box<Self>, Box<Self>),
     }
 

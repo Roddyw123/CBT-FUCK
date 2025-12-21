@@ -55,9 +55,7 @@ pub mod parser {
                     expr.clone().delimited_by(open_bracket(), close_bracket()),
                 ))
                 .pratt((
-                    prefix(14, just('!').padded(), |e1, x, e| {
-                        Expr::Neg(Box::new(x))
-                    }),
+                    prefix(14, just('!').padded(), |e1, x, e| Expr::Neg(Box::new(x))),
                     infix(left(13), just('*').padded(), |x, e1, y, e| {
                         Expr::Mul(Box::new(x), Box::new(y))
                     }),
@@ -76,6 +74,15 @@ pub mod parser {
                     infix(right(2), just("=").padded(), |x, e1, y, e| {
                         Expr::Assignment(Box::new(x), Box::new(y))
                     }),
+                    postfix(
+                        15,
+                        expr.clone()
+                            .separated_by(just(',').padded())
+                            .allow_trailing()
+                            .collect::<Vec<Expr>>()
+                            .delimited_by(open_bracket(), close_bracket()),
+                        |x, y, e| Expr::Call(Box::new(x), y),
+                    ),
                 ))
                 //TODO: then fold with postfix operators
             })
@@ -1182,14 +1189,12 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Lt(
-                            Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(
-                                Expr::Atom(Atom::Var("a"))
-                            ))))),
-                            Box::new(Expr::Atom(Atom::Var("b")))
-                        )
-                    )
+                    Some(Expr::Lt(
+                        Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Atom(
+                            Atom::Var("a")
+                        )))))),
+                        Box::new(Expr::Atom(Atom::Var("b")))
+                    ))
                 )])
             );
         }
@@ -1206,19 +1211,13 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Mul(
-                            Box::new(
-                                Expr::Neg(Box::new(
-                                    Expr::Add(
-                                        Box::new(Expr::Atom(Atom::Var("a"))),
-                                        Box::new(Expr::Atom(Atom::Var("b")))
-                                    )
-                                ))
-                            ),
-                            Box::new(Expr::Atom(Atom::Var("c")))
-                        )
-                    )
+                    Some(Expr::Mul(
+                        Box::new(Expr::Neg(Box::new(Expr::Add(
+                            Box::new(Expr::Atom(Atom::Var("a"))),
+                            Box::new(Expr::Atom(Atom::Var("b")))
+                        )))),
+                        Box::new(Expr::Atom(Atom::Var("c")))
+                    ))
                 )])
             );
         }
@@ -1454,7 +1453,7 @@ pub mod parser {
         }
 
         #[test]
-        fn full_precedence_stress_test() {
+        fn no_postfix_precedence_stress_test() {
             let stmts = parser::<&str, Err<EmptyErr>>()
                 .parse("char r = a = !!b + c * !d < e == !(f = g + !h);")
                 .into_result();
@@ -1475,51 +1474,308 @@ pub mod parser {
                                     Box::new(
                                         // (!!b + (c * !d)) < e
                                         Expr::Lt(
-                                            Box::new(
-                                                Expr::Add(
-                                                    Box::new(
-                                                        Expr::Neg(Box::new(
-                                                            Expr::Neg(Box::new(
-                                                                Expr::Atom(Atom::Var("b"))
-                                                            ))
-                                                        ))
-                                                    ),
-                                                    Box::new(
-                                                        Expr::Mul(
-                                                            Box::new(Expr::Atom(Atom::Var("c"))),
-                                                            Box::new(
-                                                                Expr::Neg(Box::new(
-                                                                    Expr::Atom(Atom::Var("d"))
-                                                                ))
-                                                            )
-                                                        )
-                                                    )
-                                                )
-                                            ),
+                                            Box::new(Expr::Add(
+                                                Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(
+                                                    Expr::Atom(Atom::Var("b"))
+                                                ))))),
+                                                Box::new(Expr::Mul(
+                                                    Box::new(Expr::Atom(Atom::Var("c"))),
+                                                    Box::new(Expr::Neg(Box::new(Expr::Atom(
+                                                        Atom::Var("d")
+                                                    ))))
+                                                ))
+                                            )),
                                             Box::new(Expr::Atom(Atom::Var("e")))
                                         )
                                     ),
                                     Box::new(
                                         // !(f = g + !h)
-                                        Expr::Neg(Box::new(
-                                            Expr::Assignment(
-                                                Box::new(Expr::Atom(Atom::Var("f"))),
-                                                Box::new(
-                                                    Expr::Add(
-                                                        Box::new(Expr::Atom(Atom::Var("g"))),
-                                                        Box::new(
-                                                            Expr::Neg(Box::new(
-                                                                Expr::Atom(Atom::Var("h"))
-                                                            ))
-                                                        )
-                                                    )
-                                                )
-                                            )
-                                        ))
+                                        Expr::Neg(Box::new(Expr::Assignment(
+                                            Box::new(Expr::Atom(Atom::Var("f"))),
+                                            Box::new(Expr::Add(
+                                                Box::new(Expr::Atom(Atom::Var("g"))),
+                                                Box::new(Expr::Neg(Box::new(Expr::Atom(
+                                                    Atom::Var("h")
+                                                ))))
+                                            ))
+                                        )))
                                     )
                                 )
                             )
                         )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn empty_call_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = f();")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Call(
+                            Box::new(Expr::Atom(Atom::Var("f"))),
+                            vec![]
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn call_with_arguments_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = f(a, b, c);")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Call(
+                            Box::new(Expr::Atom(Atom::Var("f"))),
+                            vec![
+                                Expr::Atom(Atom::Var("a")),
+                                Expr::Atom(Atom::Var("b")),
+                                Expr::Atom(Atom::Var("c"))
+                            ]
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn call_with_negation_argument_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = f(!a, !!b);")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Call(
+                            Box::new(Expr::Atom(Atom::Var("f"))),
+                            vec![
+                                Expr::Neg(Box::new(Expr::Atom(Atom::Var("a")))),
+                                Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Atom(Atom::Var("b"))))))
+                            ]
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn call_with_binary_expression_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = f(a) + b * c;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Add(
+                            Box::new(Expr::Call(
+                                Box::new(Expr::Atom(Atom::Var("f"))),
+                                vec![Expr::Atom(Atom::Var("a"))]
+                            )),
+                            Box::new(Expr::Mul(
+                                Box::new(Expr::Atom(Atom::Var("b"))),
+                                Box::new(Expr::Atom(Atom::Var("c")))
+                            ))
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn nested_function_call_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = f(g(a), h(b, c));")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Call(
+                            Box::new(Expr::Atom(Atom::Var("f"))),
+                            vec![
+                                Expr::Call(
+                                    Box::new(Expr::Atom(Atom::Var("g"))),
+                                    vec![Expr::Atom(Atom::Var("a"))]
+                                ),
+                                Expr::Call(
+                                    Box::new(Expr::Atom(Atom::Var("h"))),
+                                    vec![Expr::Atom(Atom::Var("b")), Expr::Atom(Atom::Var("c"))]
+                                )
+                            ]
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn function_call_with_brackets_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = !(f(a) + b) * c;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Mul(
+                            Box::new(
+                                Expr::Neg(Box::new(
+                                    Expr::Add(
+                                        Box::new(Expr::Call(
+                                            Box::new(Expr::Atom(Atom::Var("f"))),
+                                            vec![Expr::Atom(Atom::Var("a"))]
+                                        )),
+                                        Box::new(Expr::Atom(Atom::Var("b")))
+                                    )
+                                ))
+                            ),
+                            Box::new(Expr::Atom(Atom::Var("c")))
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn complex_call_expression_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = (fs + i)(r);")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Call(
+                            Box::new(
+                                Expr::Add(
+                                    Box::new(Expr::Atom(Atom::Var("fs"))),
+                                    Box::new(Expr::Atom(Atom::Var("i")))
+                                )
+                            ),
+                            vec![Expr::Atom(Atom::Var("r"))]
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn chained_calls_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = f()(g)(h + i);")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Call(
+                            Box::new(
+                                Expr::Call(
+                                    Box::new(Expr::Call(
+                                        Box::new(Expr::Atom(Atom::Var("f"))),
+                                        vec![]
+                                    )),
+                                    vec![Expr::Atom(Atom::Var("g"))]
+                                )
+                            ),
+                            vec![Expr::Add(
+                                Box::new(Expr::Atom(Atom::Var("h"))),
+                                Box::new(Expr::Atom(Atom::Var("i")))
+                            )]
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn call_vs_mul_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = f(a) * b;")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Mul(
+                            Box::new(Expr::Call(
+                                Box::new(Expr::Atom(Atom::Var("f"))),
+                                vec![Expr::Atom(Atom::Var("a"))]
+                            )),
+                            Box::new(Expr::Atom(Atom::Var("b")))
+                        )
+                    )
+                )])
+            );
+        }
+
+        #[test]
+        fn call_vs_unary_test() {
+            let stmts = parser::<&str, Err<EmptyErr>>()
+                .parse("char e = !f(a);")
+                .into_result();
+
+            assert_eq!(
+                stmts,
+                Ok(vec![GStmt::VarDec(
+                    Type::Char,
+                    "e",
+                    None,
+                    Some(
+                        Expr::Neg(Box::new(
+                            Expr::Call(
+                                Box::new(Expr::Atom(Atom::Var("f"))),
+                                vec![Expr::Atom(Atom::Var("a"))]
+                            )
+                        ))
                     )
                 )])
             );
