@@ -241,5 +241,68 @@ pub mod localop {
                 ])
             );
         }
+
+        #[test]
+        #[ignore]
+        fn no_coalescing_add_loop_test() {
+            let symbols = vec![
+                BfSymbol::Plus,
+                BfSymbol::Plus,
+                BfSymbol::OpenBracket,
+                BfSymbol::Plus,
+                BfSymbol::Plus,
+                BfSymbol::CloseBracket,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![
+                    Stmt::Add(2),
+                    Stmt::Loop(Prog::Vec(vec![Stmt::Add(2)]))
+                ])
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn no_coalescing_move_loop_test() {
+            let symbols = vec![
+                BfSymbol::Right,
+                BfSymbol::Right,
+                BfSymbol::OpenBracket,
+                BfSymbol::Right,
+                BfSymbol::Right,
+                BfSymbol::CloseBracket,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![
+                    Stmt::Move(2),
+                    Stmt::Loop(Prog::Vec(vec![Stmt::Move(2)]))
+                ])
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn no_coalescing_io_loop_test() {
+            let symbols = vec![
+                BfSymbol::Comma,
+                BfSymbol::Comma,
+                BfSymbol::OpenBracket,
+                BfSymbol::Comma,
+                BfSymbol::Comma,
+                BfSymbol::CloseBracket,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![
+                    Stmt::Input(2),
+                    Stmt::Loop(Prog::Vec(vec![Stmt::Input(2)]))
+                ])
+            );
+        }
     }
 }
