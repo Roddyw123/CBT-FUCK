@@ -19,15 +19,75 @@ pub mod localop {
     }
 
     pub fn optimise_local(prog: Vec<BfSymbol>) -> Prog {
-        todo!()
+        let mut stmts = Vec::new();
+        let mut loop_stack = Vec::new();
+
+        for symbol in prog {
+            match symbol {
+                BfSymbol::Plus => {
+                    if let Some(Stmt::Add(n)) = stmts.last_mut() {
+                        *n += 1;
+                    } else {
+                        stmts.push(Stmt::Add(1));
+                    }
+                }
+                BfSymbol::Minus => {
+                    if let Some(Stmt::Add(n)) = stmts.last_mut() {
+                        *n -= 1;
+                    } else {
+                        stmts.push(Stmt::Add(-1));
+                    }
+                }
+                BfSymbol::Right => {
+                    if let Some(Stmt::Move(n)) = stmts.last_mut() {
+                        *n += 1;
+                    } else {
+                        stmts.push(Stmt::Move(1));
+                    }
+                }
+                BfSymbol::Left => {
+                    if let Some(Stmt::Move(n)) = stmts.last_mut() {
+                        *n -= 1;
+                    } else {
+                        stmts.push(Stmt::Move(-1));
+                    }
+                }
+                BfSymbol::Period => {
+                    if let Some(Stmt::Output(n)) = stmts.last_mut() {
+                        *n += 1;
+                    } else {
+                        stmts.push(Stmt::Output(1));
+                    }
+                }
+                BfSymbol::Comma => {
+                    if let Some(Stmt::Input(n)) = stmts.last_mut() {
+                        *n += 1;
+                    } else {
+                        stmts.push(Stmt::Input(1));
+                    }
+                }
+                BfSymbol::OpenBracket => {
+                    loop_stack.push(stmts);
+                    stmts = Vec::new();
+                }
+                BfSymbol::CloseBracket => {
+                    if let Some(mut start) = loop_stack.pop() {
+                        let loop_body = stmts;
+                        start.push(Stmt::Loop(Prog::Vec(loop_body)));
+                        stmts = start;
+                    }
+                }
+            }
+        }
+
+        Prog::Vec(stmts)
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn loop_nesting_1_test() {
             let symbols = vec![
                 BfSymbol::OpenBracket,
@@ -47,8 +107,7 @@ pub mod localop {
             );
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn loop_nesting_2_test() {
             let symbols = vec![
                 BfSymbol::Period,
@@ -72,24 +131,21 @@ pub mod localop {
             );
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn add_test() {
             let symbols = vec![BfSymbol::Plus, BfSymbol::Plus, BfSymbol::Plus];
             let optimized = optimise_local(symbols);
             assert_eq!(optimized, Prog::Vec(vec![Stmt::Add(3)]));
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn subtract_test() {
             let symbols = vec![BfSymbol::Minus, BfSymbol::Minus, BfSymbol::Minus];
             let optimized = optimise_local(symbols);
             assert_eq!(optimized, Prog::Vec(vec![Stmt::Add(-3)]));
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn add_zero_test() {
             let symbols = vec![
                 BfSymbol::Plus,
@@ -102,24 +158,21 @@ pub mod localop {
             assert_eq!(optimized, Prog::Vec(vec![Stmt::Add(1)]));
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn move_right_test() {
             let symbols = vec![BfSymbol::Right, BfSymbol::Right, BfSymbol::Right];
             let optimized = optimise_local(symbols);
             assert_eq!(optimized, Prog::Vec(vec![Stmt::Move(3)]));
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn move_left_test() {
             let symbols = vec![BfSymbol::Left, BfSymbol::Left, BfSymbol::Left];
             let optimized = optimise_local(symbols);
             assert_eq!(optimized, Prog::Vec(vec![Stmt::Move(-3)]));
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn move_cancel_test() {
             let symbols = vec![
                 BfSymbol::Right,
@@ -132,8 +185,7 @@ pub mod localop {
             assert_eq!(optimized, Prog::Vec(vec![Stmt::Move(-1)]));
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn input_output_test() {
             let symbols = vec![
                 BfSymbol::Comma,
@@ -145,8 +197,7 @@ pub mod localop {
             assert_eq!(optimized, Prog::Vec(vec![Stmt::Input(2), Stmt::Output(2)]));
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn no_cancel_io_test() {
             let symbols = vec![
                 BfSymbol::Comma,
@@ -166,8 +217,7 @@ pub mod localop {
             );
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn no_coalescing_add_move_test() {
             let symbols = vec![
                 BfSymbol::Plus,
@@ -192,8 +242,7 @@ pub mod localop {
             );
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn no_coalescing_add_io_test() {
             let symbols = vec![
                 BfSymbol::Plus,
@@ -217,8 +266,7 @@ pub mod localop {
             );
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn no_coalescing_move_io_test() {
             let symbols = vec![
                 BfSymbol::Right,
@@ -242,8 +290,7 @@ pub mod localop {
             );
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn no_coalescing_add_loop_test() {
             let symbols = vec![
                 BfSymbol::Plus,
@@ -263,8 +310,7 @@ pub mod localop {
             );
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn no_coalescing_move_loop_test() {
             let symbols = vec![
                 BfSymbol::Right,
@@ -284,8 +330,7 @@ pub mod localop {
             );
         }
 
-        #[test]
-        #[ignore]
+        #[test]        
         fn no_coalescing_io_loop_test() {
             let symbols = vec![
                 BfSymbol::Comma,
