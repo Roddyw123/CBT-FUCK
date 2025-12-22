@@ -73,7 +73,14 @@ pub mod localop {
                 BfSymbol::CloseBracket => {
                     if let Some(mut start) = loop_stack.pop() {
                         let loop_body = stmts;
-                        start.push(Stmt::Loop(Prog::Vec(loop_body)));
+                        start.push(match loop_body[..] {
+                            // TODO: zero loop detection
+                            // scan loop
+                            [Stmt::Move(dir@(1|-1))] => {
+                                Stmt::ScanLoop(dir)
+                            }
+                            _ => {Stmt::Loop(Prog::Vec(loop_body))}
+                        });
                         stmts = start;
                     }
                 }
@@ -351,7 +358,6 @@ pub mod localop {
         }
 
         #[test]
-        #[ignore]
         fn scan_loop_test() {
             let symbols = vec![
                 BfSymbol::Right,
@@ -370,7 +376,6 @@ pub mod localop {
         }
 
         #[test]
-        #[ignore]
         fn scan_loop_negative_test() {
             let symbols = vec![
                 BfSymbol::Left,
@@ -389,7 +394,6 @@ pub mod localop {
         }
 
         #[test]
-        #[ignore]
         fn not_scan_loop_test() {
             let symbols = vec![
                 BfSymbol::Right,
@@ -409,7 +413,6 @@ pub mod localop {
         }
 
         #[test]
-        #[ignore]
         fn subtle_true_scan_loop_test() {
             let symbols = vec![
                 BfSymbol::Right,
