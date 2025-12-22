@@ -41,8 +41,8 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![
-                    Stmt::Loop(Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![Stmt::Add(1)]))])),
-                    Stmt::Add(-1)
+                    Stmt::Loop(Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![Stmt::Add(1)])), Stmt::Add(-1)])),
+                    
                 ])
             );
         }
@@ -63,7 +63,7 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![
-                    Stmt::Input(1),
+                    Stmt::Output(1),
                     Stmt::Loop(Prog::Vec(vec![
                         Stmt::Add(-1),
                         Stmt::Loop(Prog::Vec(vec![Stmt::Add(1)]))
@@ -185,7 +185,7 @@ pub mod localop {
                 optimized,
                 Prog::Vec(vec![
                     Stmt::Add(2),
-                    Stmt::Move(1),
+                    Stmt::Move(2),
                     Stmt::Add(2),
                     Stmt::Move(-3)
                 ])
