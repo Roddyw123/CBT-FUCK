@@ -3,7 +3,7 @@ pub mod parser {
     use super::super::cast::ast::*;
     use chumsky::{
         container::OrderedSeq,
-        error::{Cheap, EmptyErr},
+        error::Rich,
         extra::{Err, ParserExtra},
         input::Input,
         pratt::*,
@@ -12,8 +12,7 @@ pub mod parser {
         IterParser, Parser,
     };
 
-    pub fn parser<'src, I: Input<'src>, E: ParserExtra<'src, I>>(
-    ) -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Cheap>> {
+    pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich<'src, char>>> where 'src: 'static {
         // not mapped to Var immediatly as it can be a function as well
         // TODO: proper identifier parsing (regex probably)
         let ident = || text::ascii::ident().padded();
@@ -232,56 +231,50 @@ pub mod parser {
 
         #[test]
         fn empty_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>().parse("").into_result();
+            let stmts = parser().parse("").into_result();
             assert_eq!(stmts, Ok(Vec::new()));
         }
 
         #[test]
         fn whitespace_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>().parse(" ").into_result();
+            let stmts = parser().parse(" ").into_result();
             assert_eq!(stmts, Ok(Vec::new()));
         }
 
         #[test]
         fn whitespace_preceeding_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>().parse(" ;").into_result();
+            let stmts = parser().parse(" ;").into_result();
             assert_eq!(stmts, Ok(Vec::new()));
         }
 
         #[test]
         fn empty_line_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>().parse(";").into_result();
+            let stmts = parser().parse(";").into_result();
             assert_eq!(stmts, Ok(Vec::new()));
         }
 
         #[test]
         fn empty_lines_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>().parse(";;").into_result();
+            let stmts = parser().parse(";;").into_result();
             assert_eq!(stmts, Ok(Vec::new()));
         }
 
         // Variable Declaration Tests
         #[test]
         fn global_char_variable_declaration_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e;")
-                .into_result();
+            let stmts = parser().parse("char e;").into_result();
             assert_eq!(stmts, Ok(vec![GStmt::VarDec(Type::Char, "e", None, None)]));
         }
 
         #[test]
         fn global_char_variable_declaration_missing_semicolon_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e")
-                .into_result();
+            let stmts = parser().parse("char e").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_char_empty_array_variable_declaration_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e[];")
-                .into_result();
+            let stmts = parser().parse("char e[];").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(Type::Char, "e", Some(None), None)])
@@ -290,9 +283,7 @@ pub mod parser {
 
         #[test]
         fn global_char_sized_array_variable_declaration_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e[v];")
-                .into_result();
+            let stmts = parser().parse("char e[v];").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -306,49 +297,37 @@ pub mod parser {
 
         #[test]
         fn global_char_variable_declaration_missing_expression_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e =;")
-                .into_result();
+            let stmts = parser().parse("char e =;").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_char_sized_array_variable_declaration_extra_identifier_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e e =;")
-                .into_result();
+            let stmts = parser().parse("char e e =;").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_char_sized_array_variable_declaration_unmatched_right_bracket_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e [=;")
-                .into_result();
+            let stmts = parser().parse("char e [=;").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_char_sized_array_variable_declaration_unmatched_left_bracket_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e ]=;")
-                .into_result();
+            let stmts = parser().parse("char e ]=;").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_untyped_variable_assignment_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("e = v;")
-                .into_result();
+            let stmts = parser().parse("e = v;").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_char_variable_declaration_assignment_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = v;")
-                .into_result();
+            let stmts = parser().parse("char e = v;").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -362,18 +341,14 @@ pub mod parser {
 
         #[test]
         fn global_char_variable_declaration_assignment_missing_semicolon_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = v")
-                .into_result();
+            let stmts = parser().parse("char e = v").into_result();
             assert!(stmts.is_err());
         }
 
         // Function Declaration Tests
         #[test]
         fn global_function_declaration_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){}")
-                .into_result();
+            let stmts = parser().parse("char foo(){}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -387,73 +362,55 @@ pub mod parser {
 
         #[test]
         fn global_function_declaration_missing_return_type_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("foo(){}")
-                .into_result();
+            let stmts = parser().parse("foo(){}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_missing_name_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char (){}")
-                .into_result();
+            let stmts = parser().parse("char (){}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_missing_open_bracket_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo){}")
-                .into_result();
+            let stmts = parser().parse("char foo){}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_missing_closed_bracket_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo({}")
-                .into_result();
+            let stmts = parser().parse("char foo({}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_extra_open_bracket_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo((){}")
-                .into_result();
+            let stmts = parser().parse("char foo((){}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_extra_closed_bracket_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo()){}")
-                .into_result();
+            let stmts = parser().parse("char foo()){}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_missing_open_curly_bracket_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo()}")
-                .into_result();
+            let stmts = parser().parse("char foo()}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_missing_closed_curly_bracket_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){")
-                .into_result();
+            let stmts = parser().parse("char foo(){").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_1_parameter_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(char a){}")
-                .into_result();
+            let stmts = parser().parse("char foo(char a){}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -467,9 +424,7 @@ pub mod parser {
 
         #[test]
         fn global_function_declaration_1_parameter_trailing_comma_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(char a,){}")
-                .into_result();
+            let stmts = parser().parse("char foo(char a,){}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -484,33 +439,25 @@ pub mod parser {
         // failing parameters
         #[test]
         fn global_function_declaration_parameter_missing_type_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(a){}")
-                .into_result();
+            let stmts = parser().parse("char foo(a){}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_parameter_missing_name_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(char){}")
-                .into_result();
+            let stmts = parser().parse("char foo(char){}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_single_comma_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(,){}")
-                .into_result();
+            let stmts = parser().parse("char foo(,){}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_function_declaration_2_parameters_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(char a, char b){}")
-                .into_result();
+            let stmts = parser().parse("char foo(char a, char b){}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -524,9 +471,7 @@ pub mod parser {
 
         #[test]
         fn global_function_declaration_2_parameters_trailing_comma_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(char a, char b, ){}")
-                .into_result();
+            let stmts = parser().parse("char foo(char a, char b, ){}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -542,31 +487,25 @@ pub mod parser {
 
         #[test]
         fn global_expression_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>().parse("e;").into_result();
+            let stmts = parser().parse("e;").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_if_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("if(e){}else{}")
-                .into_result();
+            let stmts = parser().parse("if(e){}else{}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_while_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("while(e){}")
-                .into_result();
+            let stmts = parser().parse("while(e){}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn global_for_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("for(e;e;e){}")
-                .into_result();
+            let stmts = parser().parse("for(e;e;e){}").into_result();
             assert!(stmts.is_err());
         }
 
@@ -574,9 +513,7 @@ pub mod parser {
 
         #[test]
         fn local_char_variable_declaration_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){char e;}")
-                .into_result();
+            let stmts = parser().parse("char foo(){char e;}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -590,17 +527,13 @@ pub mod parser {
 
         #[test]
         fn local_char_variable_declaration_missing_semicolon_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){char e}")
-                .into_result();
+            let stmts = parser().parse("char foo(){char e}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn local_char_empty_array_variable_declaration_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){char e[];}")
-                .into_result();
+            let stmts = parser().parse("char foo(){char e[];}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -614,9 +547,7 @@ pub mod parser {
 
         #[test]
         fn local_char_sized_array_variable_declaration_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){char e[v];}")
-                .into_result();
+            let stmts = parser().parse("char foo(){char e[v];}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -635,41 +566,31 @@ pub mod parser {
 
         #[test]
         fn local_char_variable_declaration_missing_expression_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){char e =;}")
-                .into_result();
+            let stmts = parser().parse("char foo(){char e =;}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn local_char_sized_array_variable_declaration_extra_identifier_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){char e e =;}")
-                .into_result();
+            let stmts = parser().parse("char foo(){char e e =;}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn local_char_sized_array_variable_declaration_unmatched_right_bracket_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){char e [=;}")
-                .into_result();
+            let stmts = parser().parse("char foo(){char e [=;}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn local_char_sized_array_variable_declaration_unmatched_left_bracket_fail_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){char e ]=;}")
-                .into_result();
+            let stmts = parser().parse("char foo(){char e ]=;}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn local_untyped_variable_assignment_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){e = v;}")
-                .into_result();
+            let stmts = parser().parse("char foo(){e = v;}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -686,9 +607,7 @@ pub mod parser {
 
         #[test]
         fn local_char_variable_declaration_assignment_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char foo(){char e = v;}")
-                .into_result();
+            let stmts = parser().parse("char foo(){char e = v;}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -707,17 +626,13 @@ pub mod parser {
 
         #[test]
         fn local_char_variable_declaration_assignment_missing_semicolon_fail_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
-                .parse("char foo(){char e = v}")
-                .into_result();
+            let stmts = parser().parse("char foo(){char e = v}").into_result();
             assert!(stmts.is_err());
         }
 
         #[test]
         fn local_empty_line_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
-                .parse("char foo(){;}")
-                .into_result();
+            let stmts = parser().parse("char foo(){;}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -731,9 +646,7 @@ pub mod parser {
 
         #[test]
         fn local_empty_lines_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
-                .parse("char foo(){;;}")
-                .into_result();
+            let stmts = parser().parse("char foo(){;;}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -748,9 +661,7 @@ pub mod parser {
         // Local Expression Tests
         #[test]
         fn local_expression_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
-                .parse("char foo(){e;}")
-                .into_result();
+            let stmts = parser().parse("char foo(){e;}").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::FuncDec(
@@ -764,7 +675,7 @@ pub mod parser {
 
         #[test]
         fn local_if_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
+            let stmts = parser()
                 .parse(
                     r#"
                 char foo(){
@@ -791,7 +702,7 @@ pub mod parser {
 
         #[test]
         fn local_if_else_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
+            let stmts = parser()
                 .parse(
                     r#"
                 char foo(){
@@ -819,7 +730,7 @@ pub mod parser {
 
         #[test]
         fn local_if_else_if_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
+            let stmts = parser()
                 .parse(
                     r#"
                 char foo(){
@@ -848,7 +759,7 @@ pub mod parser {
 
         #[test]
         fn local_while_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
+            let stmts = parser()
                 .parse(
                     r#"
                 char foo(){
@@ -871,7 +782,7 @@ pub mod parser {
 
         #[test]
         fn local_for_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
+            let stmts = parser()
                 .parse(
                     r#"
                 char foo(){
@@ -905,7 +816,7 @@ pub mod parser {
 
         #[test]
         fn local_for_empty_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
+            let stmts = parser()
                 .parse(
                     r#"
                 char foo(){
@@ -928,7 +839,7 @@ pub mod parser {
 
         #[test]
         fn local_for_partially_empty_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
+            let stmts = parser()
                 .parse(
                     r#"
                 char foo(){
@@ -956,7 +867,7 @@ pub mod parser {
 
         #[test]
         fn local_function_declaration_test() {
-            let stmts = parser::<&str, Err<Cheap>>()
+            let stmts = parser()
                 .parse(
                     r#"
                 char foo(){
@@ -979,9 +890,7 @@ pub mod parser {
 
         #[test]
         fn numeric_literal_expression_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = 15;")
-                .into_result();
+            let stmts = parser().parse("char e = 15;").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -995,9 +904,7 @@ pub mod parser {
 
         #[test]
         fn parenthesized_expression_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = (v);")
-                .into_result();
+            let stmts = parser().parse("char e = (v);").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -1011,9 +918,7 @@ pub mod parser {
 
         #[test]
         fn negate_expression_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = !v;")
-                .into_result();
+            let stmts = parser().parse("char e = !v;").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -1027,9 +932,7 @@ pub mod parser {
 
         #[test]
         fn double_negate_expression_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = !!v;")
-                .into_result();
+            let stmts = parser().parse("char e = !!v;").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -1045,9 +948,7 @@ pub mod parser {
 
         #[test]
         fn add_expressions_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = u + v;")
-                .into_result();
+            let stmts = parser().parse("char e = u + v;").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -1064,9 +965,7 @@ pub mod parser {
 
         #[test]
         fn multiply_expressions_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = u * v;")
-                .into_result();
+            let stmts = parser().parse("char e = u * v;").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -1083,9 +982,7 @@ pub mod parser {
 
         #[test]
         fn less_than_expressions_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = u < v;")
-                .into_result();
+            let stmts = parser().parse("char e = u < v;").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -1102,9 +999,7 @@ pub mod parser {
 
         #[test]
         fn greater_than_expressions_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = u > v;")
-                .into_result();
+            let stmts = parser().parse("char e = u > v;").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -1121,9 +1016,7 @@ pub mod parser {
 
         #[test]
         fn equal_expressions_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = u == v;")
-                .into_result();
+            let stmts = parser().parse("char e = u == v;").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -1140,9 +1033,7 @@ pub mod parser {
 
         #[test]
         fn assign_expressions_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = u = v;")
-                .into_result();
+            let stmts = parser().parse("char e = u = v;").into_result();
             assert_eq!(
                 stmts,
                 Ok(vec![GStmt::VarDec(
@@ -1159,9 +1050,7 @@ pub mod parser {
 
         #[test]
         fn negation_binds_tighter_than_multiplication() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = !a * b;")
-                .into_result();
+            let stmts = parser().parse("char e = !a * b;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1179,9 +1068,7 @@ pub mod parser {
 
         #[test]
         fn double_negation_with_comparison() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = !!a < b;")
-                .into_result();
+            let stmts = parser().parse("char e = !!a < b;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1201,9 +1088,7 @@ pub mod parser {
 
         #[test]
         fn brackets_override_negation_binding() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = !(a + b) * c;")
-                .into_result();
+            let stmts = parser().parse("char e = !(a + b) * c;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1224,9 +1109,7 @@ pub mod parser {
 
         #[test]
         fn mul_has_higher_precedence_than_add() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = a + b * c;")
-                .into_result();
+            let stmts = parser().parse("char e = a + b * c;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1247,9 +1130,7 @@ pub mod parser {
 
         #[test]
         fn bracket_overrides_mul_precedence() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = (a + b) * c;")
-                .into_result();
+            let stmts = parser().parse("char e = (a + b) * c;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1270,9 +1151,7 @@ pub mod parser {
 
         #[test]
         fn add_has_higher_precedence_than_less_than() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = a + b < c;")
-                .into_result();
+            let stmts = parser().parse("char e = a + b < c;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1293,9 +1172,7 @@ pub mod parser {
 
         #[test]
         fn bracket_overrides_comparison_precedence() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = a + (b < c);")
-                .into_result();
+            let stmts = parser().parse("char e = a + (b < c);").into_result();
 
             assert_eq!(
                 stmts,
@@ -1316,9 +1193,7 @@ pub mod parser {
 
         #[test]
         fn comparison_has_higher_precedence_than_equality() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = a < b == c;")
-                .into_result();
+            let stmts = parser().parse("char e = a < b == c;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1339,9 +1214,7 @@ pub mod parser {
 
         #[test]
         fn bracket_overrides_equality_precedence() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = a < (b == c);")
-                .into_result();
+            let stmts = parser().parse("char e = a < (b == c);").into_result();
 
             assert_eq!(
                 stmts,
@@ -1362,9 +1235,7 @@ pub mod parser {
 
         #[test]
         fn equality_has_higher_precedence_than_assignment() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = a == b = c;")
-                .into_result();
+            let stmts = parser().parse("char e = a == b = c;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1385,9 +1256,7 @@ pub mod parser {
 
         #[test]
         fn bracket_overrides_assignment_precedence() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = a = (b == c);")
-                .into_result();
+            let stmts = parser().parse("char e = a = (b == c);").into_result();
 
             assert_eq!(
                 stmts,
@@ -1408,9 +1277,7 @@ pub mod parser {
 
         #[test]
         fn addition_is_left_associative() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = a + b + c;")
-                .into_result();
+            let stmts = parser().parse("char e = a + b + c;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1431,9 +1298,7 @@ pub mod parser {
 
         #[test]
         fn assignment_is_right_associative() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = a = b = c;")
-                .into_result();
+            let stmts = parser().parse("char e = a = b = c;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1454,7 +1319,7 @@ pub mod parser {
 
         #[test]
         fn no_postfix_precedence_stress_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
+            let stmts = parser()
                 .parse("char r = a = !!b + c * !d < e == !(f = g + !h);")
                 .into_result();
 
@@ -1510,9 +1375,7 @@ pub mod parser {
 
         #[test]
         fn empty_call_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = f();")
-                .into_result();
+            let stmts = parser().parse("char e = f();").into_result();
 
             assert_eq!(
                 stmts,
@@ -1520,21 +1383,14 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Call(
-                            Box::new(Expr::Atom(Atom::Var("f"))),
-                            vec![]
-                        )
-                    )
+                    Some(Expr::Call(Box::new(Expr::Atom(Atom::Var("f"))), vec![]))
                 )])
             );
         }
 
         #[test]
         fn call_with_arguments_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = f(a, b, c);")
-                .into_result();
+            let stmts = parser().parse("char e = f(a, b, c);").into_result();
 
             assert_eq!(
                 stmts,
@@ -1542,25 +1398,21 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Call(
-                            Box::new(Expr::Atom(Atom::Var("f"))),
-                            vec![
-                                Expr::Atom(Atom::Var("a")),
-                                Expr::Atom(Atom::Var("b")),
-                                Expr::Atom(Atom::Var("c"))
-                            ]
-                        )
-                    )
+                    Some(Expr::Call(
+                        Box::new(Expr::Atom(Atom::Var("f"))),
+                        vec![
+                            Expr::Atom(Atom::Var("a")),
+                            Expr::Atom(Atom::Var("b")),
+                            Expr::Atom(Atom::Var("c"))
+                        ]
+                    ))
                 )])
             );
         }
 
         #[test]
         fn call_with_negation_argument_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = f(!a, !!b);")
-                .into_result();
+            let stmts = parser().parse("char e = f(!a, !!b);").into_result();
 
             assert_eq!(
                 stmts,
@@ -1568,24 +1420,20 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Call(
-                            Box::new(Expr::Atom(Atom::Var("f"))),
-                            vec![
-                                Expr::Neg(Box::new(Expr::Atom(Atom::Var("a")))),
-                                Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Atom(Atom::Var("b"))))))
-                            ]
-                        )
-                    )
+                    Some(Expr::Call(
+                        Box::new(Expr::Atom(Atom::Var("f"))),
+                        vec![
+                            Expr::Neg(Box::new(Expr::Atom(Atom::Var("a")))),
+                            Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Atom(Atom::Var("b"))))))
+                        ]
+                    ))
                 )])
             );
         }
 
         #[test]
         fn call_with_binary_expression_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = f(a) + b * c;")
-                .into_result();
+            let stmts = parser().parse("char e = f(a) + b * c;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1593,27 +1441,23 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Add(
-                            Box::new(Expr::Call(
-                                Box::new(Expr::Atom(Atom::Var("f"))),
-                                vec![Expr::Atom(Atom::Var("a"))]
-                            )),
-                            Box::new(Expr::Mul(
-                                Box::new(Expr::Atom(Atom::Var("b"))),
-                                Box::new(Expr::Atom(Atom::Var("c")))
-                            ))
-                        )
-                    )
+                    Some(Expr::Add(
+                        Box::new(Expr::Call(
+                            Box::new(Expr::Atom(Atom::Var("f"))),
+                            vec![Expr::Atom(Atom::Var("a"))]
+                        )),
+                        Box::new(Expr::Mul(
+                            Box::new(Expr::Atom(Atom::Var("b"))),
+                            Box::new(Expr::Atom(Atom::Var("c")))
+                        ))
+                    ))
                 )])
             );
         }
 
         #[test]
         fn nested_function_call_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = f(g(a), h(b, c));")
-                .into_result();
+            let stmts = parser().parse("char e = f(g(a), h(b, c));").into_result();
 
             assert_eq!(
                 stmts,
@@ -1621,30 +1465,26 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Call(
-                            Box::new(Expr::Atom(Atom::Var("f"))),
-                            vec![
-                                Expr::Call(
-                                    Box::new(Expr::Atom(Atom::Var("g"))),
-                                    vec![Expr::Atom(Atom::Var("a"))]
-                                ),
-                                Expr::Call(
-                                    Box::new(Expr::Atom(Atom::Var("h"))),
-                                    vec![Expr::Atom(Atom::Var("b")), Expr::Atom(Atom::Var("c"))]
-                                )
-                            ]
-                        )
-                    )
+                    Some(Expr::Call(
+                        Box::new(Expr::Atom(Atom::Var("f"))),
+                        vec![
+                            Expr::Call(
+                                Box::new(Expr::Atom(Atom::Var("g"))),
+                                vec![Expr::Atom(Atom::Var("a"))]
+                            ),
+                            Expr::Call(
+                                Box::new(Expr::Atom(Atom::Var("h"))),
+                                vec![Expr::Atom(Atom::Var("b")), Expr::Atom(Atom::Var("c"))]
+                            )
+                        ]
+                    ))
                 )])
             );
         }
 
         #[test]
         fn function_call_with_brackets_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = !(f(a) + b) * c;")
-                .into_result();
+            let stmts = parser().parse("char e = !(f(a) + b) * c;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1652,31 +1492,23 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Mul(
-                            Box::new(
-                                Expr::Neg(Box::new(
-                                    Expr::Add(
-                                        Box::new(Expr::Call(
-                                            Box::new(Expr::Atom(Atom::Var("f"))),
-                                            vec![Expr::Atom(Atom::Var("a"))]
-                                        )),
-                                        Box::new(Expr::Atom(Atom::Var("b")))
-                                    )
-                                ))
-                            ),
-                            Box::new(Expr::Atom(Atom::Var("c")))
-                        )
-                    )
+                    Some(Expr::Mul(
+                        Box::new(Expr::Neg(Box::new(Expr::Add(
+                            Box::new(Expr::Call(
+                                Box::new(Expr::Atom(Atom::Var("f"))),
+                                vec![Expr::Atom(Atom::Var("a"))]
+                            )),
+                            Box::new(Expr::Atom(Atom::Var("b")))
+                        )))),
+                        Box::new(Expr::Atom(Atom::Var("c")))
+                    ))
                 )])
             );
         }
 
         #[test]
         fn complex_call_expression_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = (fs + i)(r);")
-                .into_result();
+            let stmts = parser().parse("char e = (fs + i)(r);").into_result();
 
             assert_eq!(
                 stmts,
@@ -1684,26 +1516,20 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Call(
-                            Box::new(
-                                Expr::Add(
-                                    Box::new(Expr::Atom(Atom::Var("fs"))),
-                                    Box::new(Expr::Atom(Atom::Var("i")))
-                                )
-                            ),
-                            vec![Expr::Atom(Atom::Var("r"))]
-                        )
-                    )
+                    Some(Expr::Call(
+                        Box::new(Expr::Add(
+                            Box::new(Expr::Atom(Atom::Var("fs"))),
+                            Box::new(Expr::Atom(Atom::Var("i")))
+                        )),
+                        vec![Expr::Atom(Atom::Var("r"))]
+                    ))
                 )])
             );
         }
 
         #[test]
         fn chained_calls_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = f()(g)(h + i);")
-                .into_result();
+            let stmts = parser().parse("char e = f()(g)(h + i);").into_result();
 
             assert_eq!(
                 stmts,
@@ -1711,32 +1537,23 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Call(
-                            Box::new(
-                                Expr::Call(
-                                    Box::new(Expr::Call(
-                                        Box::new(Expr::Atom(Atom::Var("f"))),
-                                        vec![]
-                                    )),
-                                    vec![Expr::Atom(Atom::Var("g"))]
-                                )
-                            ),
-                            vec![Expr::Add(
-                                Box::new(Expr::Atom(Atom::Var("h"))),
-                                Box::new(Expr::Atom(Atom::Var("i")))
-                            )]
-                        )
-                    )
+                    Some(Expr::Call(
+                        Box::new(Expr::Call(
+                            Box::new(Expr::Call(Box::new(Expr::Atom(Atom::Var("f"))), vec![])),
+                            vec![Expr::Atom(Atom::Var("g"))]
+                        )),
+                        vec![Expr::Add(
+                            Box::new(Expr::Atom(Atom::Var("h"))),
+                            Box::new(Expr::Atom(Atom::Var("i")))
+                        )]
+                    ))
                 )])
             );
         }
 
         #[test]
         fn call_vs_mul_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = f(a) * b;")
-                .into_result();
+            let stmts = parser().parse("char e = f(a) * b;").into_result();
 
             assert_eq!(
                 stmts,
@@ -1744,24 +1561,20 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Mul(
-                            Box::new(Expr::Call(
-                                Box::new(Expr::Atom(Atom::Var("f"))),
-                                vec![Expr::Atom(Atom::Var("a"))]
-                            )),
-                            Box::new(Expr::Atom(Atom::Var("b")))
-                        )
-                    )
+                    Some(Expr::Mul(
+                        Box::new(Expr::Call(
+                            Box::new(Expr::Atom(Atom::Var("f"))),
+                            vec![Expr::Atom(Atom::Var("a"))]
+                        )),
+                        Box::new(Expr::Atom(Atom::Var("b")))
+                    ))
                 )])
             );
         }
 
         #[test]
         fn call_vs_unary_test() {
-            let stmts = parser::<&str, Err<EmptyErr>>()
-                .parse("char e = !f(a);")
-                .into_result();
+            let stmts = parser().parse("char e = !f(a);").into_result();
 
             assert_eq!(
                 stmts,
@@ -1769,14 +1582,10 @@ pub mod parser {
                     Type::Char,
                     "e",
                     None,
-                    Some(
-                        Expr::Neg(Box::new(
-                            Expr::Call(
-                                Box::new(Expr::Atom(Atom::Var("f"))),
-                                vec![Expr::Atom(Atom::Var("a"))]
-                            )
-                        ))
-                    )
+                    Some(Expr::Neg(Box::new(Expr::Call(
+                        Box::new(Expr::Atom(Atom::Var("f"))),
+                        vec![Expr::Atom(Atom::Var("a"))]
+                    ))))
                 )])
             );
         }
