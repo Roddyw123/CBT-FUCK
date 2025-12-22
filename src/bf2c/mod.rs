@@ -1,3 +1,5 @@
+mod localop;
+
 pub mod bf2c {
     use indoc::indoc;
 
