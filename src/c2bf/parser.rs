@@ -8,11 +8,11 @@ pub mod parser {
         input::Input,
         pratt::*,
         prelude::{choice, just, recursive},
-        text::{self, ascii::keyword},
+        text::{self},
         IterParser, Parser,
     };
 
-    pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich<'src, char>>> where 'src: 'static {
+    pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich<'src, char>>> {
         // not mapped to Var immediatly as it can be a function as well
         // TODO: proper identifier parsing (regex probably)
         let ident = || text::ascii::ident().padded();
@@ -88,7 +88,7 @@ pub mod parser {
         };
 
         let types =
-            || choice((keyword("char").to(Type::Char), keyword("int").to(Type::Int))).padded();
+            || choice((text::keyword("char").to(Type::Char), text::keyword("int").to(Type::Int))).padded();
 
         let typed_variable = || {
             types().then(ident()).then(
@@ -150,21 +150,21 @@ pub mod parser {
                 let block = || block_help(stmt.clone(), open_curly_bracket(), close_curly_bracket());
 
                 let x_statment = |name| {
-                    keyword(name)
+                    text::keyword(name)
                         .padded()
                         .ignore_then(expr().delimited_by(open_bracket(), close_bracket()))
                         .then(block())
                 };
                 let if_statment = x_statment("if")
                     .then(
-                        keyword("else")
+                        text::keyword("else")
                             .padded()
                             .ignore_then(x_statment("if"))
                             .repeated()
                             .collect::<Vec<(Expr, Vec<LStmt>)>>(),
                     )
-                    .then(keyword("else").padded().ignore_then(block()).or_not());
-                let for_loop = keyword("for")
+                    .then(text::keyword("else").padded().ignore_then(block()).or_not());
+                let for_loop = text::keyword("for")
                     .padded()
                     .ignore_then(
                         // TODO: accept empty parts
