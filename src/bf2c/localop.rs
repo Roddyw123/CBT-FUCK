@@ -446,5 +446,147 @@ pub mod localop {
                 Prog::Vec(vec![Stmt::Move(1), Stmt::ScanLoop(1),])
             );
         }
+
+        #[test]
+        #[ignore]
+        fn multiplication_loop_1_test() {
+            // [->+<]
+            let symbols = vec![
+                BfSymbol::OpenBracket,
+                BfSymbol::Minus,
+                BfSymbol::Right,
+                BfSymbol::Plus,
+                BfSymbol::Left,
+            ];
+            let optimized = optimise_local(symbols);
+        }
+
+        #[test]
+        #[ignore]
+        fn multiplication_loop_2_test() {
+            // [->>++<<]
+            let symbols = vec![
+                BfSymbol::OpenBracket,
+                BfSymbol::Minus,
+                BfSymbol::Right,
+                BfSymbol::Right,
+                BfSymbol::Plus,
+                BfSymbol::Plus,
+                BfSymbol::Left,
+                BfSymbol::Left,
+            ];
+            let optimized = optimise_local(symbols);
+            // assert_eq!(
+            //     optimized,
+            //     Prog::Vec(vec![Stmt::MultiplicationLoop(1, ())])
+            // )
+        }
+
+        #[test]
+        #[ignore]
+        fn multiplication_loop_3_test() {
+            // [-<>>+++<]
+            let symbols = vec![
+                BfSymbol::OpenBracket,
+                BfSymbol::Minus,
+                BfSymbol::Left,
+                BfSymbol::Plus,
+                BfSymbol::Right,
+                BfSymbol::Right,
+                BfSymbol::Plus,
+                BfSymbol::Plus,
+                BfSymbol::Plus,
+                BfSymbol::Left,
+            ];
+            let optimized = optimise_local(symbols);
+            // assert_eq!(
+            //     optimized,
+            //     Prog::Vec(vec![Stmt::MultiplicationLoop(1, ())])
+            // )
+        }
+
+        #[test]
+        #[ignore]
+        fn multiplication_loop_transfer_with_odd_decrement_test() {
+            // [--->>++>>>+++++<<<<<]
+            let symbols = vec![
+                BfSymbol::OpenBracket,
+                BfSymbol::Minus,
+                BfSymbol::Minus,
+                BfSymbol::Minus,
+                BfSymbol::Right,
+                BfSymbol::Right,
+                BfSymbol::Plus,
+                BfSymbol::Plus,
+                BfSymbol::Right,
+                BfSymbol::Right,
+                BfSymbol::Right,
+                BfSymbol::Plus,
+                BfSymbol::Plus,
+                BfSymbol::Plus,
+                BfSymbol::Plus,
+                BfSymbol::Plus,
+                BfSymbol::Left,
+                BfSymbol::Left,
+                BfSymbol::Left,
+                BfSymbol::Left,
+                BfSymbol::Left,
+            ];
+            let optimized = optimise_local(symbols);
+            // assert_eq!(
+            //     optimized,
+            //     Prog::Vec(vec![Stmt::MultiplicationLoop(1, ())])
+            // )
+        }
+
+        #[test]
+        #[ignore]
+        fn ignore_even_decrement_multiplication_loops_1_test() {
+            let symbols = vec![
+                BfSymbol::Minus,
+                BfSymbol::Minus,
+                BfSymbol::Right,
+                BfSymbol::Right,
+                BfSymbol::Plus,
+                BfSymbol::Left,
+                BfSymbol::Left,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![
+                    Stmt::Add(-2),
+                    Stmt::Move(2),
+                    Stmt::Add(1),
+                    Stmt::Move(-2),
+                ]))])
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn ignore_even_decrement_multiplication_loops_2_test() {
+            let symbols = vec![
+                BfSymbol::Minus,
+                BfSymbol::Minus,
+                BfSymbol::Minus,
+                BfSymbol::Minus,
+                BfSymbol::Right,
+                BfSymbol::Right,
+                BfSymbol::Plus,
+                BfSymbol::Left,
+                BfSymbol::Left,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![
+                    Stmt::Add(-4),
+                    Stmt::Move(2),
+                    Stmt::Add(1),
+                    Stmt::Move(-2),
+                ]))])
+            );
+        }
     }
 }
