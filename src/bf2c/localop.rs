@@ -1,7 +1,7 @@
 pub mod localop {
     use super::super::bf2c::*;
     pub enum Prog {
-        Vec(Stmt),
+        Vec(Vec<Stmt>),
     }
 
     pub enum Stmt {
@@ -9,7 +9,7 @@ pub mod localop {
         Move(i32),
         Output(i32),
         Input(i32),
-        Loop(Box<Prog>),
+        Loop(Prog),
         ZeroLoop,
         ScanLoop(i32),
         MultiplicationLoop(u8, Vec<(i32, i32)>),
