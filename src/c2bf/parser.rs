@@ -142,29 +142,28 @@ pub mod parser {
                         .collect::<Vec<_>>()
                         .delimited_by(open_bracket(), close_bracket()),
                 )
-                .then(block_help(stmt, open_curly_bracket(), close_curly_bracket()).clone())
+                .then(block_help(stmt, open_curly_bracket(), close_curly_bracket()))
         };
 
         let local_stmt = || {
             recursive(|stmt| {
-                let block = block_help(stmt.clone(), open_curly_bracket(), close_curly_bracket());
+                let block = || block_help(stmt.clone(), open_curly_bracket(), close_curly_bracket());
 
                 let x_statment = |name| {
                     keyword(name)
                         .padded()
                         .ignore_then(expr().delimited_by(open_bracket(), close_bracket()))
-                        .then(block.clone())
+                        .then(block())
                 };
                 let if_statment = x_statment("if")
-                    .clone()
                     .then(
                         keyword("else")
                             .padded()
-                            .ignore_then(x_statment("if").clone())
+                            .ignore_then(x_statment("if"))
                             .repeated()
                             .collect::<Vec<(Expr, Vec<LStmt>)>>(),
                     )
-                    .then(keyword("else").padded().ignore_then(block.clone()).or_not());
+                    .then(keyword("else").padded().ignore_then(block()).or_not());
                 let for_loop = keyword("for")
                     .padded()
                     .ignore_then(
@@ -178,14 +177,14 @@ pub mod parser {
                             .then(expr().or_not())
                             .delimited_by(open_bracket(), close_bracket()),
                     )
-                    .then(block.clone());
-                let func_dec = func_dec_help.clone()(stmt);
+                    .then(block());
+                let func_dec = || func_dec_help(stmt.clone());
                 choice((
                     declaration().map(|(((ty, name), arr), exp)| LStmt::VarDec(ty, name, arr, exp)),
                     x_statment("while").map(|(cond, body)| LStmt::While(cond, body)),
                     if_statment.map(|((e1, e2), else_tail)| LStmt::Ifs(e1, e2, else_tail)),
                     for_loop.map(|(((e1, e2), e3), body)| LStmt::For(e1, e2, e3, body)),
-                    func_dec.clone().map(|(((ty, name), params), body)| {
+                    func_dec().map(|(((ty, name), params), body)| {
                         LStmt::FuncDec(
                             ty,
                             name,
@@ -203,7 +202,7 @@ pub mod parser {
         let global_stmts = || {
             choice((
                 declaration().map(|(((ty, name), arr), exp)| GStmt::VarDec(ty, name, arr, exp)),
-                func_dec_help.clone()(local_stmt()).map(|(((ty, name), params), body)| {
+                func_dec_help(local_stmt()).map(|(((ty, name), params), body)| {
                     GStmt::FuncDec(
                         ty,
                         name,
