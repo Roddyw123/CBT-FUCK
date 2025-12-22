@@ -349,5 +349,106 @@ pub mod localop {
                 ])
             );
         }
+
+        #[test]
+        #[ignore]
+        fn scan_loop_test() {
+            let symbols = vec![
+                BfSymbol::Right,
+                BfSymbol::OpenBracket,
+                BfSymbol::Right,
+                BfSymbol::CloseBracket,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![
+                    Stmt::Move(1),
+                    Stmt::ScanLoop(1)
+                ])
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn scan_loop_negative_test() {
+            let symbols = vec![
+                BfSymbol::Left,
+                BfSymbol::OpenBracket,
+                BfSymbol::Left,
+                BfSymbol::CloseBracket,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![
+                    Stmt::Move(-1),
+                    Stmt::ScanLoop(-1)
+                ])
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn not_scan_loop_test() {
+            let symbols = vec![
+                BfSymbol::Right,
+                BfSymbol::OpenBracket,
+                BfSymbol::Right,
+                BfSymbol::Right,
+                BfSymbol::CloseBracket,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![
+                    Stmt::Move(1),
+                    Stmt::Loop(Prog::Vec(vec![Stmt::Move(2)]))
+                ])
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn subtle_true_scan_loop_test() {
+            let symbols = vec![
+                BfSymbol::Right,
+                BfSymbol::OpenBracket,
+                BfSymbol::Right,
+                BfSymbol::Left,
+                BfSymbol::Left,
+                BfSymbol::CloseBracket,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![
+                    Stmt::Move(1),
+                    Stmt::ScanLoop(-1),
+                ])
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn ignore_cancelled_operations_in_scan_loop_test() {
+            let symbols = vec![
+                BfSymbol::Right,
+                BfSymbol::OpenBracket,
+                BfSymbol::Right,
+                BfSymbol::Plus,
+                BfSymbol::Minus,
+                BfSymbol::CloseBracket,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![
+                    Stmt::Move(1),
+                    Stmt::ScanLoop(1),
+                ])
+            );
+        }
+
     }
 }
