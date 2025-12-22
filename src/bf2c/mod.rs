@@ -4,7 +4,7 @@ pub mod bf2c {
     use indoc::indoc;
 
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    enum BfSymbol {
+    pub enum BfSymbol {
         Left,
         Right,
         Plus,
