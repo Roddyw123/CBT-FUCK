@@ -27,6 +27,9 @@ pub mod localop {
                 BfSymbol::Plus => {
                     if let Some(Stmt::Add(n)) = stmts.last_mut() {
                         *n += 1;
+                        if n == &0 {
+                            stmts.pop();
+                        }
                     } else {
                         stmts.push(Stmt::Add(1));
                     }
@@ -34,6 +37,9 @@ pub mod localop {
                 BfSymbol::Minus => {
                     if let Some(Stmt::Add(n)) = stmts.last_mut() {
                         *n -= 1;
+                        if n == &0 {
+                            stmts.pop();
+                        }
                     } else {
                         stmts.push(Stmt::Add(-1));
                     }
@@ -41,6 +47,9 @@ pub mod localop {
                 BfSymbol::Right => {
                     if let Some(Stmt::Move(n)) = stmts.last_mut() {
                         *n += 1;
+                        if n == &0 {
+                            stmts.pop();
+                        }
                     } else {
                         stmts.push(Stmt::Move(1));
                     }
@@ -48,6 +57,9 @@ pub mod localop {
                 BfSymbol::Left => {
                     if let Some(Stmt::Move(n)) = stmts.last_mut() {
                         *n -= 1;
+                        if n == &0 {
+                            stmts.pop();
+                        }
                     } else {
                         stmts.push(Stmt::Move(-1));
                     }
@@ -419,7 +431,6 @@ pub mod localop {
         }
 
         #[test]
-        #[ignore]
         fn ignore_cancelled_operations_in_scan_loop_test() {
             let symbols = vec![
                 BfSymbol::Right,
