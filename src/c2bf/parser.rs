@@ -150,6 +150,21 @@ pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich
                 open_curly_bracket(),
                 close_curly_bracket(),
             ))
+            .map(|(((ty, name), params), body)| {
+                (
+                    (
+                        (
+                            Type::Fn(
+                                Box::new(ty),
+                                params.iter().map(|((ty, name), arr)| ty.clone()).collect(),
+                            ),
+                            name,
+                        ),
+                        params,
+                    ),
+                    body,
+                )
+            })
     };
 
     let local_stmt = || {

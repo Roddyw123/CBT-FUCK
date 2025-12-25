@@ -5,6 +5,26 @@ pub mod ast {
     pub enum Type {
         Char,
         Int,
+        Fn(Box<Type>, Vec<Type>),
+    }
+
+    impl Display for Type {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Type::Char => write!(f, "char"),
+                Type::Int => write!(f, "int"),
+                Type::Fn(ret, args) => {
+                    write!(f, "fn(")?;
+                    for (i, arg) in args.iter().enumerate() {
+                        write!(f, "{}", arg)?;
+                        if i != args.len() - 1 {
+                            write!(f, ", ")?;
+                        }
+                    }
+                    write!(f, ") -> {}", ret)
+                }
+            }
+        }
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
