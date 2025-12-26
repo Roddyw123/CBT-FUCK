@@ -632,5 +632,28 @@ pub mod localop {
                 ]))])
             );
         }
+
+        #[test]
+        #[ignore]
+        fn declutter_multiplication_loop_test() {
+            // [->+>+<-<]
+            let symbols = vec![
+                BfSymbol::OpenBracket,
+                BfSymbol::Minus,
+                BfSymbol::Right,
+                BfSymbol::Plus,
+                BfSymbol::Right,
+                BfSymbol::Plus,
+                BfSymbol::Left,
+                BfSymbol::Minus,
+                BfSymbol::Left,
+                BfSymbol::CloseBracket,
+            ];
+            let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::MultiplicationLoop(1, vec![(2, 1)])])
+            );
+        }
     }
 }
