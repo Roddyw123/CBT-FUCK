@@ -1,5 +1,5 @@
 pub mod localop {
-    use std::{collections::HashMap, ops::Add};
+    use std::collections::{HashMap, HashSet};
 
     use super::super::bf2c::*;
 
@@ -17,7 +17,7 @@ pub mod localop {
         Loop(Prog),
         ZeroLoop,
         ScanLoop(i32),
-        MultiplicationLoop(u8, Vec<(i32, i32)>),
+        MultiplicationLoop(u8, HashSet<(i32, i32)>),
     }
 
     pub fn optimise_local(prog: Vec<BfSymbol>) -> Prog {
@@ -115,7 +115,10 @@ pub mod localop {
                                         if decrement % 2 != 0 && offset == 0 {
                                             Some(Stmt::MultiplicationLoop(
                                                 -decrement as u8,
-                                                changes.into_iter().map(|(k, v)| (k, v)).collect(),
+                                                changes.into_iter()
+                                                .filter(|(_, v)| *v != 0)
+                                                .map(|(k, v)| (k, v))
+                                                .collect(),
                                             ))
                                         } else {
                                             None
@@ -497,7 +500,7 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::MultiplicationLoop(1, vec![(1, 1)])])
+                Prog::Vec(vec![Stmt::MultiplicationLoop(1, HashSet::from([(1, 1)]))])
             );
         }
 
@@ -518,7 +521,7 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::MultiplicationLoop(1, vec![(2, 2)])])
+                Prog::Vec(vec![Stmt::MultiplicationLoop(1, HashSet::from([(2, 2)]))])
             );
         }
 
@@ -541,7 +544,7 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::MultiplicationLoop(1, vec![(-1, 1), (1, 3)])])
+                Prog::Vec(vec![Stmt::MultiplicationLoop(1, HashSet::from([(-1, 1), (1, 3)]))])
             );
         }
 
@@ -575,7 +578,7 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::MultiplicationLoop(3, vec![(2, 2), (5, 5)])])
+                Prog::Vec(vec![Stmt::MultiplicationLoop(3, HashSet::from([(2, 2), (5, 5)]))])
             );
         }
 
@@ -634,7 +637,6 @@ pub mod localop {
         }
 
         #[test]
-        #[ignore]
         fn declutter_multiplication_loop_test() {
             // [->+>+<-<]
             let symbols = vec![
@@ -652,7 +654,7 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::MultiplicationLoop(1, vec![(2, 1)])])
+                Prog::Vec(vec![Stmt::MultiplicationLoop(1, HashSet::from([(2, 1)]))])
             );
         }
     }
