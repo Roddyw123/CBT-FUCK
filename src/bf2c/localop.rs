@@ -10,8 +10,10 @@ pub mod localop {
 
     #[derive(Debug, PartialEq, Eq)]
     pub enum Stmt {
-        Add(i32),
-        Move(i32),
+        Action(
+            i32,               // offset
+            HashMap<i32, i32>, // changes
+        ),
         Output(i32),
         Input(i32),
         Loop(Prog),
@@ -27,43 +29,43 @@ pub mod localop {
         for symbol in prog {
             match symbol {
                 BfSymbol::Plus => {
-                    if let Some(Stmt::Add(n)) = stmts.last_mut() {
-                        *n += 1;
-                        if n == &0 {
-                            stmts.pop();
+                    if let Some(Stmt::Action(offset, changes)) = stmts.last_mut() {
+                        if let Some(n) = changes.get_mut(offset) {
+                            *n += 1;
+                        } else {
+                            changes.insert(*offset, 1);
+                        }
+                        if let Some(0) = changes.get(offset) {
+                            changes.remove(offset);
                         }
                     } else {
-                        stmts.push(Stmt::Add(1));
+                        stmts.push(Stmt::Action(0, HashMap::from([(0, 1)])));
                     }
                 }
                 BfSymbol::Minus => {
-                    if let Some(Stmt::Add(n)) = stmts.last_mut() {
-                        *n -= 1;
-                        if n == &0 {
-                            stmts.pop();
+                    if let Some(Stmt::Action(offset, changes)) = stmts.last_mut() {
+                        if let Some(n) = changes.get_mut(offset) {
+                            *n -= 1;
+                        }
+                        if let Some(0) = changes.get(offset) {
+                            changes.remove(offset);
                         }
                     } else {
-                        stmts.push(Stmt::Add(-1));
+                        stmts.push(Stmt::Action(0, HashMap::from([(0, -1)])));
                     }
                 }
                 BfSymbol::Right => {
-                    if let Some(Stmt::Move(n)) = stmts.last_mut() {
-                        *n += 1;
-                        if n == &0 {
-                            stmts.pop();
-                        }
+                    if let Some(Stmt::Action(offset, _changes)) = stmts.last_mut() {
+                        *offset += 1;
                     } else {
-                        stmts.push(Stmt::Move(1));
+                        stmts.push(Stmt::Action(1, HashMap::new()));
                     }
                 }
                 BfSymbol::Left => {
-                    if let Some(Stmt::Move(n)) = stmts.last_mut() {
-                        *n -= 1;
-                        if n == &0 {
-                            stmts.pop();
-                        }
+                    if let Some(Stmt::Action(offset, _changes)) = stmts.last_mut() {
+                        *offset -= 1;
                     } else {
-                        stmts.push(Stmt::Move(-1));
+                        stmts.push(Stmt::Action(-1, HashMap::new()));
                     }
                 }
                 BfSymbol::Period => {
@@ -87,48 +89,53 @@ pub mod localop {
                 BfSymbol::CloseBracket => {
                     if let Some(mut start) = loop_stack.pop() {
                         let loop_body = stmts;
-                        start.push(match loop_body[..] {
+                        start.push(match &loop_body[..] {
                             // TODO: zero loop detection
                             // scan loop
-                            [Stmt::Move(dir @ (1 | -1))] => Stmt::ScanLoop(dir),
+                            [Stmt::Action(dir @ (1 | -1), changes)] if changes.is_empty() => {
+                                Stmt::ScanLoop(*dir)
+                            }
                             // multiplication loop
                             [ref body @ ..] => {
-                                body.iter().fold(Some((0, HashMap::new())), |res, stmt| {
-                                    res.and_then(|(mut offset, mut changes)| {
-                                        match stmt {
-                                            Stmt::Add(n) => {
-                                                *changes.entry(offset).or_insert(0) += n;
+                                body.iter()
+                                    .fold(Some((0, HashMap::new())), |res, stmt| {
+                                        res.and_then(|(mut offset, mut changes)| {
+                                            match stmt {
+                                                Stmt::Action(offset1, changes1) => {
+                                                    changes1.iter().for_each(|(k, v)| {
+                                                        *changes.entry(offset + k).or_insert(0) +=
+                                                            v;
+                                                    });
+                                                    offset += offset1;
+                                                }
+                                                _ => {
+                                                    // not a multiplication loop
+                                                    return None;
+                                                }
                                             }
-                                            Stmt::Move(n) => {
-                                                offset += n;
-                                            }
-                                            _ => {
-                                                // not a multiplication loop
-                                                return None;
-                                            }
-                                        }
-                                        Some((offset, changes))
+                                            Some((offset, changes))
+                                        })
                                     })
-                                })
-                                .and_then(|(offset, mut changes)| {
-                                    if let Some(decrement) = changes.remove(&0) {
-                                        if decrement % 2 != 0 && offset == 0 {
-                                            Some(Stmt::MultiplicationLoop(
-                                                -decrement as u8,
-                                                changes.into_iter()
-                                                .filter(|(_, v)| *v != 0)
-                                                .map(|(k, v)| (k, v))
-                                                .collect(),
-                                            ))
+                                    .and_then(|(offset, mut changes)| {
+                                        if let Some(decrement) = changes.remove(&0) {
+                                            if decrement % 2 != 0 && offset == 0 {
+                                                Some(Stmt::MultiplicationLoop(
+                                                    -decrement as u8,
+                                                    changes
+                                                        .into_iter()
+                                                        .filter(|(_, v)| *v != 0)
+                                                        .map(|(k, v)| (k, v))
+                                                        .collect(),
+                                                ))
+                                            } else {
+                                                None
+                                            }
                                         } else {
                                             None
                                         }
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .map_or_else(||Stmt::Loop(Prog::Vec(loop_body)), |x|x)
-                            },
+                                    })
+                                    .map_or_else(|| Stmt::Loop(Prog::Vec(loop_body)), |x| x)
+                            }
                         });
                         stmts = start;
                     }
@@ -158,7 +165,7 @@ pub mod localop {
                 optimized,
                 Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![
                     Stmt::Loop(Prog::Vec(vec![Stmt::Input(1)])),
-                    Stmt::Add(-1)
+                    Stmt::Action(0, HashMap::from([(0, -1)])),
                 ])),])
             );
         }
@@ -180,7 +187,7 @@ pub mod localop {
                 Prog::Vec(vec![
                     Stmt::Output(1),
                     Stmt::Loop(Prog::Vec(vec![
-                        Stmt::Add(-1),
+                        Stmt::Action(0, HashMap::from([(0, -1)])),
                         Stmt::Loop(Prog::Vec(vec![Stmt::Output(1)]))
                     ]))
                 ])
@@ -191,14 +198,14 @@ pub mod localop {
         fn add_test() {
             let symbols = vec![BfSymbol::Plus, BfSymbol::Plus, BfSymbol::Plus];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Add(3)]));
+            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(0, HashMap::from([(0, 3)]))]));
         }
 
         #[test]
         fn subtract_test() {
             let symbols = vec![BfSymbol::Minus, BfSymbol::Minus, BfSymbol::Minus];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Add(-3)]));
+            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(0, HashMap::from([(0, -3)]))]));
         }
 
         #[test]
@@ -211,21 +218,21 @@ pub mod localop {
                 BfSymbol::Minus,
             ];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Add(1)]));
+            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(0, HashMap::from([(0, 1)]))]));
         }
 
         #[test]
         fn move_right_test() {
             let symbols = vec![BfSymbol::Right, BfSymbol::Right, BfSymbol::Right];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Move(3)]));
+            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(3, HashMap::new())]));
         }
 
         #[test]
         fn move_left_test() {
             let symbols = vec![BfSymbol::Left, BfSymbol::Left, BfSymbol::Left];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Move(-3)]));
+            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(-3, HashMap::new())]));
         }
 
         #[test]
@@ -238,7 +245,7 @@ pub mod localop {
                 BfSymbol::Left,
             ];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Move(-1)]));
+            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(-1, HashMap::new())]));
         }
 
         #[test]
@@ -290,10 +297,7 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![
-                    Stmt::Add(2),
-                    Stmt::Move(2),
-                    Stmt::Add(2),
-                    Stmt::Move(-3)
+                    Stmt::Action(-1, HashMap::from([(0, 2), (2, 2)])),
                 ])
             );
         }
@@ -314,9 +318,9 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![
-                    Stmt::Add(2),
+                    Stmt::Action(0, HashMap::from([(0, 2)])),
                     Stmt::Input(2),
-                    Stmt::Add(2),
+                    Stmt::Action(0, HashMap::from([(0, 2)])),
                     Stmt::Output(2)
                 ])
             );
@@ -338,9 +342,9 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![
-                    Stmt::Move(2),
+                    Stmt::Action(2, HashMap::new()),
                     Stmt::Input(2),
-                    Stmt::Move(-2),
+                    Stmt::Action(-2, HashMap::new()),
                     Stmt::Output(2)
                 ])
             );
@@ -360,8 +364,8 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![
-                    Stmt::Add(2),
-                    Stmt::Loop(Prog::Vec(vec![Stmt::Add(2)]))
+                    Stmt::Action(0, HashMap::from([(0, 2)])),
+                    Stmt::Loop(Prog::Vec(vec![Stmt::Action(0, HashMap::from([(0, 2)]))]))
                 ])
             );
         }
@@ -380,8 +384,8 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![
-                    Stmt::Move(2),
-                    Stmt::Loop(Prog::Vec(vec![Stmt::Move(2)]))
+                    Stmt::Action(2, HashMap::new()),
+                    Stmt::Loop(Prog::Vec(vec![Stmt::Action(2, HashMap::new())]))
                 ])
             );
         }
@@ -415,7 +419,7 @@ pub mod localop {
                 BfSymbol::CloseBracket,
             ];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Move(1), Stmt::ScanLoop(1)]));
+            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(1, HashMap::new()), Stmt::ScanLoop(1)]));
         }
 
         #[test]
@@ -429,7 +433,7 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::Move(-1), Stmt::ScanLoop(-1)])
+                Prog::Vec(vec![Stmt::Action(-1, HashMap::new()), Stmt::ScanLoop(-1)])
             );
         }
 
@@ -446,8 +450,8 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![
-                    Stmt::Move(1),
-                    Stmt::Loop(Prog::Vec(vec![Stmt::Move(2)]))
+                    Stmt::Action(1, HashMap::new()),
+                    Stmt::Loop(Prog::Vec(vec![Stmt::Action(2, HashMap::new())]))
                 ])
             );
         }
@@ -465,7 +469,7 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::Move(1), Stmt::ScanLoop(-1),])
+                Prog::Vec(vec![Stmt::Action(1, HashMap::new()), Stmt::ScanLoop(-1)])
             );
         }
 
@@ -482,7 +486,7 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::Move(1), Stmt::ScanLoop(1),])
+                Prog::Vec(vec![Stmt::Action(1, HashMap::new()), Stmt::ScanLoop(1)])
             );
         }
 
@@ -544,7 +548,10 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::MultiplicationLoop(1, HashSet::from([(-1, 1), (1, 3)]))])
+                Prog::Vec(vec![Stmt::MultiplicationLoop(
+                    1,
+                    HashSet::from([(-1, 1), (1, 3)])
+                )])
             );
         }
 
@@ -578,7 +585,10 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::MultiplicationLoop(3, HashSet::from([(2, 2), (5, 5)]))])
+                Prog::Vec(vec![Stmt::MultiplicationLoop(
+                    3,
+                    HashSet::from([(2, 2), (5, 5)])
+                )])
             );
         }
 
@@ -600,10 +610,7 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![
-                    Stmt::Add(-2),
-                    Stmt::Move(2),
-                    Stmt::Add(1),
-                    Stmt::Move(-2),
+                    Stmt::Action(0, HashMap::from([(0, -2), (2, 1)])),
                 ]))])
             );
         }
@@ -628,10 +635,7 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![
-                    Stmt::Add(-4),
-                    Stmt::Move(2),
-                    Stmt::Add(1),
-                    Stmt::Move(-2),
+                    Stmt::Action(0, HashMap::from([(0, -4), (2, 1)])),
                 ]))])
             );
         }
