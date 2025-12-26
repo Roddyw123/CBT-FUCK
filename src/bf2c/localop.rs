@@ -109,7 +109,7 @@ pub mod localop {
             let symbols = vec![
                 BfSymbol::OpenBracket,
                 BfSymbol::OpenBracket,
-                BfSymbol::Plus,
+                BfSymbol::Comma,
                 BfSymbol::CloseBracket,
                 BfSymbol::Minus,
                 BfSymbol::CloseBracket,
@@ -118,7 +118,7 @@ pub mod localop {
             assert_eq!(
                 optimized,
                 Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![
-                    Stmt::Loop(Prog::Vec(vec![Stmt::Add(1)])),
+                    Stmt::Loop(Prog::Vec(vec![Stmt::Input(1)])),
                     Stmt::Add(-1)
                 ])),])
             );
@@ -131,7 +131,7 @@ pub mod localop {
                 BfSymbol::OpenBracket,
                 BfSymbol::Minus,
                 BfSymbol::OpenBracket,
-                BfSymbol::Plus,
+                BfSymbol::Period,
                 BfSymbol::CloseBracket,
                 BfSymbol::CloseBracket,
             ];
@@ -142,7 +142,7 @@ pub mod localop {
                     Stmt::Output(1),
                     Stmt::Loop(Prog::Vec(vec![
                         Stmt::Add(-1),
-                        Stmt::Loop(Prog::Vec(vec![Stmt::Add(1)]))
+                        Stmt::Loop(Prog::Vec(vec![Stmt::Output(1)]))
                     ]))
                 ])
             );
