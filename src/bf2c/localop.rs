@@ -448,8 +448,7 @@ pub mod localop {
         }
 
         #[test]
-        #[ignore]
-        fn multiplication_loop_1_test() {
+        fn simple_multiplication_loop_test() {
             // [->+<]
             let symbols = vec![
                 BfSymbol::OpenBracket,
@@ -457,13 +456,17 @@ pub mod localop {
                 BfSymbol::Right,
                 BfSymbol::Plus,
                 BfSymbol::Left,
+                BfSymbol::CloseBracket,
             ];
             let optimized = optimise_local(symbols);
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::MultiplicationLoop(1, vec![(1, 1)])])
+            );
         }
 
         #[test]
-        #[ignore]
-        fn multiplication_loop_2_test() {
+        fn multiplication_loop_with_larger_offset_test() {
             // [->>++<<]
             let symbols = vec![
                 BfSymbol::OpenBracket,
@@ -474,18 +477,18 @@ pub mod localop {
                 BfSymbol::Plus,
                 BfSymbol::Left,
                 BfSymbol::Left,
+                BfSymbol::CloseBracket,
             ];
             let optimized = optimise_local(symbols);
-            // assert_eq!(
-            //     optimized,
-            //     Prog::Vec(vec![Stmt::MultiplicationLoop(1, ())])
-            // )
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::MultiplicationLoop(1, vec![(2, 2)])])
+            );
         }
 
         #[test]
-        #[ignore]
-        fn multiplication_loop_3_test() {
-            // [-<>>+++<]
+        fn multiplication_loop_multiple_targets_test() {
+            // [-<+>>+++<]
             let symbols = vec![
                 BfSymbol::OpenBracket,
                 BfSymbol::Minus,
@@ -497,17 +500,17 @@ pub mod localop {
                 BfSymbol::Plus,
                 BfSymbol::Plus,
                 BfSymbol::Left,
+                BfSymbol::CloseBracket,
             ];
             let optimized = optimise_local(symbols);
-            // assert_eq!(
-            //     optimized,
-            //     Prog::Vec(vec![Stmt::MultiplicationLoop(1, ())])
-            // )
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::MultiplicationLoop(1, vec![(-1, 1), (1, 3)])])
+            );
         }
 
         #[test]
-        #[ignore]
-        fn multiplication_loop_transfer_with_odd_decrement_test() {
+        fn multiplication_loop_odd_decrement_test() {
             // [--->>++>>>+++++<<<<<]
             let symbols = vec![
                 BfSymbol::OpenBracket,
@@ -531,18 +534,20 @@ pub mod localop {
                 BfSymbol::Left,
                 BfSymbol::Left,
                 BfSymbol::Left,
+                BfSymbol::CloseBracket,
             ];
             let optimized = optimise_local(symbols);
-            // assert_eq!(
-            //     optimized,
-            //     Prog::Vec(vec![Stmt::MultiplicationLoop(1, ())])
-            // )
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::MultiplicationLoop(3, vec![(2, 2), (5, 5)])])
+            );
         }
 
         #[test]
-        #[ignore]
-        fn ignore_even_decrement_multiplication_loops_1_test() {
+        fn not_multiplication_loop_even_decrement_test() {
+            // [-->>+<<]
             let symbols = vec![
+                BfSymbol::OpenBracket,
                 BfSymbol::Minus,
                 BfSymbol::Minus,
                 BfSymbol::Right,
@@ -550,6 +555,7 @@ pub mod localop {
                 BfSymbol::Plus,
                 BfSymbol::Left,
                 BfSymbol::Left,
+                BfSymbol::CloseBracket,
             ];
             let optimized = optimise_local(symbols);
             assert_eq!(
@@ -564,9 +570,10 @@ pub mod localop {
         }
 
         #[test]
-        #[ignore]
-        fn ignore_even_decrement_multiplication_loops_2_test() {
+        fn not_multiplication_loop_even_decrement_large_test() {
+            // [---->>+<<]
             let symbols = vec![
+                BfSymbol::OpenBracket,
                 BfSymbol::Minus,
                 BfSymbol::Minus,
                 BfSymbol::Minus,
@@ -576,6 +583,7 @@ pub mod localop {
                 BfSymbol::Plus,
                 BfSymbol::Left,
                 BfSymbol::Left,
+                BfSymbol::CloseBracket,
             ];
             let optimized = optimise_local(symbols);
             assert_eq!(
