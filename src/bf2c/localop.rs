@@ -1,4 +1,6 @@
 pub mod localop {
+    use std::{collections::HashMap, ops::Add};
+
     use super::super::bf2c::*;
 
     #[derive(Debug, PartialEq, Eq)]
@@ -89,7 +91,41 @@ pub mod localop {
                             // TODO: zero loop detection
                             // scan loop
                             [Stmt::Move(dir @ (1 | -1))] => Stmt::ScanLoop(dir),
-                            _ => Stmt::Loop(Prog::Vec(loop_body)),
+                            // multiplication loop
+                            [ref body @ ..] => {
+                                body.iter().fold(Some((0, HashMap::new())), |res, stmt| {
+                                    res.and_then(|(mut offset, mut changes)| {
+                                        match stmt {
+                                            Stmt::Add(n) => {
+                                                *changes.entry(offset).or_insert(0) += n;
+                                            }
+                                            Stmt::Move(n) => {
+                                                offset += n;
+                                            }
+                                            _ => {
+                                                // not a multiplication loop
+                                                return None;
+                                            }
+                                        }
+                                        Some((offset, changes))
+                                    })
+                                })
+                                .and_then(|(offset, mut changes)| {
+                                    if let Some(decrement) = changes.remove(&0) {
+                                        if decrement % 2 != 0 && offset == 0 {
+                                            Some(Stmt::MultiplicationLoop(
+                                                -decrement as u8,
+                                                changes.into_iter().map(|(k, v)| (k, v)).collect(),
+                                            ))
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .map_or_else(||Stmt::Loop(Prog::Vec(loop_body)), |x|x)
+                            },
                         });
                         stmts = start;
                     }
