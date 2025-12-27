@@ -117,22 +117,19 @@ pub mod localop {
                                         })
                                     })
                                     .and_then(|(offset, mut changes)| {
-                                        if let Some(decrement) = changes.remove(&0) {
-                                            if decrement % 2 != 0 && offset == 0 {
-                                                Some(Stmt::MultiplicationLoop(
+                                        changes
+                                            .remove(&0)
+                                            .filter(|decrement| decrement % 2 != 0 && offset == 0)
+                                            .map(|decrement| {
+                                                Stmt::MultiplicationLoop(
                                                     -decrement as u8,
                                                     changes
                                                         .into_iter()
                                                         .filter(|(_, v)| *v != 0)
                                                         .map(|(k, v)| (k, v))
                                                         .collect(),
-                                                ))
-                                            } else {
-                                                None
-                                            }
-                                        } else {
-                                            None
-                                        }
+                                                )
+                                            })
                                     })
                                     .map_or_else(|| Stmt::Loop(Prog::Vec(loop_body)), |x| x)
                             }
@@ -198,14 +195,20 @@ pub mod localop {
         fn add_test() {
             let symbols = vec![BfSymbol::Plus, BfSymbol::Plus, BfSymbol::Plus];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(0, HashMap::from([(0, 3)]))]));
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::Action(0, HashMap::from([(0, 3)]))])
+            );
         }
 
         #[test]
         fn subtract_test() {
             let symbols = vec![BfSymbol::Minus, BfSymbol::Minus, BfSymbol::Minus];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(0, HashMap::from([(0, -3)]))]));
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::Action(0, HashMap::from([(0, -3)]))])
+            );
         }
 
         #[test]
@@ -218,7 +221,10 @@ pub mod localop {
                 BfSymbol::Minus,
             ];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(0, HashMap::from([(0, 1)]))]));
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::Action(0, HashMap::from([(0, 1)]))])
+            );
         }
 
         #[test]
@@ -296,9 +302,7 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![
-                    Stmt::Action(-1, HashMap::from([(0, 2), (2, 2)])),
-                ])
+                Prog::Vec(vec![Stmt::Action(-1, HashMap::from([(0, 2), (2, 2)])),])
             );
         }
 
@@ -419,7 +423,10 @@ pub mod localop {
                 BfSymbol::CloseBracket,
             ];
             let optimized = optimise_local(symbols);
-            assert_eq!(optimized, Prog::Vec(vec![Stmt::Action(1, HashMap::new()), Stmt::ScanLoop(1)]));
+            assert_eq!(
+                optimized,
+                Prog::Vec(vec![Stmt::Action(1, HashMap::new()), Stmt::ScanLoop(1)])
+            );
         }
 
         #[test]
@@ -609,9 +616,10 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![
-                    Stmt::Action(0, HashMap::from([(0, -2), (2, 1)])),
-                ]))])
+                Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![Stmt::Action(
+                    0,
+                    HashMap::from([(0, -2), (2, 1)])
+                ),]))])
             );
         }
 
@@ -634,9 +642,10 @@ pub mod localop {
             let optimized = optimise_local(symbols);
             assert_eq!(
                 optimized,
-                Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![
-                    Stmt::Action(0, HashMap::from([(0, -4), (2, 1)])),
-                ]))])
+                Prog::Vec(vec![Stmt::Loop(Prog::Vec(vec![Stmt::Action(
+                    0,
+                    HashMap::from([(0, -4), (2, 1)])
+                ),]))])
             );
         }
 
