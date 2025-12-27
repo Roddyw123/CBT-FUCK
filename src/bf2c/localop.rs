@@ -131,7 +131,7 @@ pub mod localop {
                                                 )
                                             })
                                     })
-                                    .map_or_else(|| Stmt::Loop(Prog::Vec(loop_body)), |x| x)
+                                    .unwrap_or(Stmt::Loop(Prog::Vec(loop_body)))
                             }
                         });
                         stmts = start;
