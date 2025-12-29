@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    fmt::{write, Debug, Display},
-    hash::Hash,
+    fmt::{Debug, Display},
 };
 
 use super::cast::ast::*;
@@ -73,12 +72,11 @@ pub enum ScopedStmt<'src> {
 #[derive(Debug)]
 pub enum SStmt<'src> {
     ScopedStmt(
-        Vec<String>,      // scope keys
+        Vec<String>,      // scope keys (delays true flattening of Trie into Hashmap)
         ScopedStmt<'src>, // Type of scoped stmt
         Vec<Self>,        // stmts inside the scope
-                          // HashMap<QualifiedName, SemType>, // symbol table (or should a version be passed around?)
     ),
-    Stmt(Expr<'src>), // stores expressions(the only case left)
+    Stmt(Expr<'src>), // stores expressions(the only case left) // consider duplicating AST to catch undeclared variables
 }
 
 #[derive(Debug)]
@@ -90,33 +88,32 @@ pub struct Trie {
 impl Trie {
     fn get_name(&mut self, scope: Vec<String>) -> Option<SemType> {
         // current scope
-        self.member
-            .clone()
-            // child scopes
-            .or(scope.first().and_then(|cd| {
-                self.map
-                    .get_mut(cd)
-                    .map(|t| t.get_name(scope[1..].to_vec()))
-                    .flatten()
-            }))
+        scope.first()
+        .and_then(|cd| {
+            self.map
+                .get_mut(cd)
+                .map(|t| t.get_name(scope[1..].to_vec()))
+                .flatten()
+        })
+        .or(self.member.clone())
     }
 
-    fn insert(&mut self, path: Vec<String>, ty: SemType) {
+    fn insert(&mut self, path: Vec<String>, ty: SemType) -> Option<SemType>{
         match path.first() {
             None => {
-                self.member = Some(ty);
+                self.member.replace(ty)
             }
             Some(cd) => {
                 let entry = self
                     .map
                     .entry(cd.to_string())
-                    .or_insert_with(|| Trie::empty());
-                entry.insert(path[1..].to_vec(), ty);
+                    .or_insert_with(|| Trie::new());
+                entry.insert(path[1..].to_vec(), ty)
             }
         }
     }
 
-    fn empty() -> Self {
+    fn new() -> Self {
         Trie {
             member: None,
             map: HashMap::new(),
@@ -129,35 +126,45 @@ pub struct RenamerCTX<E> {
     mapping: HashMap<String, Trie>,
     errs: Vec<E>,
     counter: u64,
+    scope: Vec<String>,
 }
 
 impl<E> RenamerCTX<E> {
     fn err(&mut self, err: E) {
         self.errs.push(err);
     }
-}
-
-impl RenamerCTX<String> {
-    fn add_name(&mut self, name: QualifiedName, ty: SemType) {
-        let trie = self
-            .mapping
-            .entry(name.name.clone())
-            .or_insert(Trie::empty());
-
-        if let Some(old_ty) = trie.get_name(name.path.clone()) {
-            trie.insert(name.path, ty);
-            self.err(format!(
-                "{} is previously defined with type: {old_ty}",
-                name.name
-            ));
-        } else {
-            trie.insert(name.path, ty);
-        }
-    }
     fn get_next_ctx(&mut self) -> String {
         let tmp = self.counter.to_string();
         self.counter += 1;
         tmp
+    }
+    fn enter_scope(&mut self) -> &mut Self {
+        let new_scope = self.get_next_ctx();
+        self.scope.push(new_scope);
+        self
+    }
+    fn exit_scope(&mut self) -> &mut Self {
+        if self.scope.is_empty() {
+            panic!("Exiting scope when none exist");
+        }
+        self.scope.pop();
+        self
+    }
+}
+
+impl RenamerCTX<String> {
+    fn add_name(&mut self, name: String, ty: SemType) {
+        let trie = self
+            .mapping
+            .entry(name.clone())
+            .or_insert(Trie::new());
+
+        if let Some(old_ty) = trie.insert(self.scope.clone(), ty) {
+            self.err(format!(
+                "{} is previously defined with type: {old_ty}",
+                name
+            ));
+        }
     }
 }
 
@@ -166,21 +173,20 @@ fn new_renamer_ctx() -> RenamerCTX<String> {
         mapping: HashMap::new(),
         errs: Vec::new(),
         counter: 0,
+        scope: Vec::new(),
     }
 }
 
 pub fn symbolify_lstmts<'a>(
     stmts: Vec<LStmt<'a>>,
     ctx: &mut RenamerCTX<String>,
-    scope: Vec<String>,
 ) -> Vec<SStmt<'a>> {
     let mut v = Vec::new();
     for stmt in stmts {
         v.push(match stmt {
             LStmt::VarDec(ty, name, _arr_info, Some(expr1)) => {
-                println!("local var dec");
                 ctx.add_name(
-                    to_qualified_name(name.to_string(), scope.clone()),
+                    name.to_string(),
                     SemType::KnownType(ty),
                 );
                 // assign value
@@ -191,27 +197,27 @@ pub fn symbolify_lstmts<'a>(
             }
             LStmt::VarDec(ty, name, _arr_info, None) => {
                 ctx.add_name(
-                    to_qualified_name(name.to_string(), scope.clone()),
+                    name.to_string(),
                     SemType::KnownType(ty),
                 );
                 None
             }
             LStmt::FuncDec(_ty, name, items, lstmts) => {
                 ctx.add_name(
-                    to_qualified_name(name.to_string(), scope.clone()),
+                    name.to_string(),
                     SemType::UnknownType,
                 );
-                let mut new_scope = scope.clone();
-                new_scope.push(name.to_string());
+                let new_scope = ctx.enter_scope().scope.clone();
                 // add argument variables into function scope
                 for (arg_ty, arg_name, _arg_arr) in items {
-                    let arg_qname = to_qualified_name(arg_name.to_string(), new_scope.clone());
-                    ctx.add_name(arg_qname.clone(), SemType::KnownType(arg_ty.clone()));
+                    ctx.add_name(arg_name.to_string(), SemType::KnownType(arg_ty));
                 }
+                let renamed_lstmts = symbolify_lstmts(lstmts, ctx);
+                ctx.exit_scope();
                 Some(SStmt::ScopedStmt(
-                    new_scope.clone(),
+                    new_scope,
                     ScopedStmt::FuncDec,
-                    symbolify_lstmts(lstmts, ctx, new_scope),
+                    renamed_lstmts,
                 ))
             }
             LStmt::For(init, cond, step, body) => {
@@ -220,46 +226,49 @@ pub fn symbolify_lstmts<'a>(
                 //     to_qualified_name(init.name.to_string(), scope.clone()),
                 //     SemType::KnownType(init.ty.clone()),
                 // );
-                let mut new_scope = scope.clone();
-                new_scope.push(ctx.get_next_ctx());
+                let new_scope = ctx.enter_scope().scope.clone();
+                let renamed_body = symbolify_lstmts(body, ctx);
+                ctx.exit_scope();
                 Some(SStmt::ScopedStmt(
-                    new_scope.clone(),
+                    new_scope,
                     ScopedStmt::For(init, cond, step),
-                    symbolify_lstmts(body, ctx, new_scope),
+                    renamed_body,
                 ))
             }
             LStmt::While(cond, body) => {
-                let mut new_scope = scope.clone();
-                new_scope.push(ctx.get_next_ctx());
+                let new_scope = ctx.enter_scope().scope.clone();
+                let renamed_body = symbolify_lstmts(body, ctx);
+                ctx.exit_scope();
                 Some(SStmt::ScopedStmt(
-                    new_scope.clone(),
+                    new_scope,
                     ScopedStmt::While(cond),
-                    symbolify_lstmts(body, ctx, new_scope),
+                    renamed_body,
                 ))
             }
             LStmt::Ifs((if_cond, if_stmts), then_branch, else_branch) => {
-                let mut new_scope = scope.clone();
-                new_scope.push(ctx.get_next_ctx());
+                let new_scope = ctx.enter_scope().scope.clone();
 
                 // if case
-                let mut if_scope = new_scope.clone();
-                if_scope.push(ctx.get_next_ctx());
+                let if_scope = ctx.enter_scope().scope.clone();
                 let mut v = vec![SStmt::ScopedStmt(
                     if_scope.clone(),
                     ScopedStmt::If(if_cond),
-                    symbolify_lstmts(if_stmts, ctx, if_scope),
+                    symbolify_lstmts(if_stmts, ctx),
                 )];
+                ctx.exit_scope();
 
                 // elif cases
                 v = v
                     .into_iter()
                     .chain(then_branch.into_iter().map(|(elif_cond, elif_stmts)| {
-                        let mut elif_scope = new_scope.clone();
-                        elif_scope.push(ctx.get_next_ctx());
+                        let elif_scope = ctx.enter_scope().scope.clone();
+                        let renamed_elif_stmts =
+                            symbolify_lstmts(elif_stmts, ctx);
+                        ctx.exit_scope();
                         SStmt::ScopedStmt(
-                            elif_scope.clone(),
+                            elif_scope,
                             ScopedStmt::Elif(elif_cond),
-                            symbolify_lstmts(elif_stmts, ctx, elif_scope),
+                            renamed_elif_stmts,
                         )
                     }))
                     .collect();
@@ -270,18 +279,20 @@ pub fn symbolify_lstmts<'a>(
                     .chain(
                         else_branch
                             .map(|else_stmts| {
-                                let mut else_scope = new_scope.clone();
-                                else_scope.push(ctx.get_next_ctx());
+                                let else_scope = ctx.enter_scope().scope.clone();
+                                let renamed_else_stmts = symbolify_lstmts(else_stmts, ctx);
+                                ctx.exit_scope();
                                 SStmt::ScopedStmt(
-                                    else_scope.clone(),
+                                    else_scope,
                                     ScopedStmt::Else,
-                                    symbolify_lstmts(else_stmts, ctx, else_scope),
+                                    renamed_else_stmts,
                                 )
                             })
                             .into_iter(),
                     )
                     .collect();
 
+                ctx.exit_scope();
                 Some(SStmt::ScopedStmt(new_scope.clone(), ScopedStmt::Carrier, v))
             }
             LStmt::Expr(expr) => Some(SStmt::Stmt(expr)),
@@ -298,7 +309,7 @@ pub fn symbolify(stmts: Vec<GStmt>) -> (SStmt, RenamerCTX<String>) {
         v.push(match stmt {
             GStmt::VarDec(ty, name, _arr_info, Some(expr1)) => {
                 ctx.add_name(
-                    to_qualified_name(name.to_string(), vec![]),
+                    name.to_string(),
                     SemType::KnownType(ty),
                 );
                 Some(SStmt::Stmt(Expr::Assignment(
@@ -308,26 +319,28 @@ pub fn symbolify(stmts: Vec<GStmt>) -> (SStmt, RenamerCTX<String>) {
             }
             GStmt::VarDec(ty, name, _arr_info, None) => {
                 ctx.add_name(
-                    to_qualified_name(name.to_string(), vec![]),
+                    name.to_string(),
                     SemType::KnownType(ty),
                 );
                 None
             }
             GStmt::FuncDec(ty, name, items, lstmts) => {
                 ctx.add_name(
-                    to_qualified_name(name.to_string(), vec![]),
+                    name.to_string(),
                     SemType::KnownType(ty.clone()),
                 );
-                let scope = vec![ctx.get_next_ctx()];
+                ctx.enter_scope();
+                let scope = ctx.scope.clone();
                 // add argument variables into function scope
                 for (arg_ty, arg_name, _arg_arr) in items {
-                    let arg_qname = to_qualified_name(arg_name.to_string(), scope.clone());
-                    ctx.add_name(arg_qname.clone(), SemType::KnownType(arg_ty.clone()));
+                    ctx.add_name(arg_name.to_string(), SemType::KnownType(arg_ty.clone()));
                 }
+                let renamed_lstmts = symbolify_lstmts(lstmts, &mut ctx);
+                ctx.exit_scope();
                 Some(SStmt::ScopedStmt(
-                    scope.clone(),
+                    scope,
                     ScopedStmt::FuncDec,
-                    symbolify_lstmts(lstmts, &mut ctx, scope),
+                    renamed_lstmts,
                 ))
             }
         });
@@ -345,6 +358,141 @@ pub fn symbolify(stmts: Vec<GStmt>) -> (SStmt, RenamerCTX<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn same_variable_global_scope_test() {
+        let (stmts, map) = symbolify(vec![
+            GStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5)))),
+            GStmt::VarDec(Type::Char, "x", None, None),
+        ]);
+        // println!("{:#?}", stmts);
+        println!("{:#?}", map);
+        assert!(!map.errs.is_empty());
+    }
+
+    #[test]
+    fn allow_shadowing_test() {
+        let (stmts, map) = symbolify(vec![
+            GStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5)))),
+            GStmt::FuncDec(
+                Type::Fn(Box::new(Type::Char), vec![Type::Int]),
+                "foo",
+                vec![(Type::Int, "x", None)],
+                vec![
+                ],
+            ),
+        ]);
+        // println!("{:#?}", stmts);
+        println!("{:#?}", map);
+        assert!(map.errs.is_empty());
+    }
+
+    #[test]
+    fn disallow_shadowing_function_parameters() {
+        let (stmts, map) = symbolify(vec![
+            GStmt::FuncDec(
+                Type::Fn(Box::new(Type::Char), vec![Type::Int]),
+                "foo",
+                vec![(Type::Int, "x", None)],
+                vec![
+                    LStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5)))),
+                ],
+            ),
+        ]);
+        // println!("{:#?}", stmts);
+        println!("{:#?}", map);
+        assert!(!map.errs.is_empty());
+    }
+
+    #[test]
+    fn allow_shadowing_from_function_body_test() {
+        let (stmts, map) = symbolify(vec![
+            GStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5)))),
+            GStmt::FuncDec(
+                Type::Fn(Box::new(Type::Char), vec![Type::Int]),
+                "foo",
+                vec![],
+                vec![
+                    LStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5)))),
+                ],
+            ),
+        ]);
+        // println!("{:#?}", stmts);
+        println!("{:#?}", map);
+        assert!(map.errs.is_empty());
+    }
+
+    #[test]
+    fn allow_shadowing_from_if_expression_test() {
+        let (stmts, map) = symbolify(vec![
+            GStmt::FuncDec(
+                Type::Fn(Box::new(Type::Char), vec![Type::Int]),
+                "foo",
+                vec![],
+                vec![
+                    LStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5)))),
+                    LStmt::Ifs(
+                        (Expr::Atom(Atom::Num(1)),
+                        vec![LStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5))))],),
+                        vec![],
+                        None,
+                    ),
+                ],
+            ),
+        ]);
+        // println!("{:#?}", stmts);
+        println!("{:#?}", map);
+        assert!(map.errs.is_empty());
+    }
+
+    #[test]
+    fn allow_shadowing_from_while_loop_test() {
+        let (stmts, map) = symbolify(vec![
+            GStmt::FuncDec(
+                Type::Fn(Box::new(Type::Char), vec![Type::Int]),
+                "foo",
+                vec![],
+                vec![
+                    LStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5)))),
+                    LStmt::While(
+                        Expr::Atom(Atom::Num(1)),
+                        vec![
+                            LStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5)))),
+                        ],
+                    ),
+                ],
+            ),
+        ]);
+        // println!("{:#?}", stmts);
+        println!("{:#?}", map);
+        assert!(map.errs.is_empty());
+    }
+
+    #[test]
+    fn allow_shadowing_from_for_loop_test() {
+        let (stmts, map) = symbolify(vec![
+            GStmt::FuncDec(
+                Type::Fn(Box::new(Type::Char), vec![Type::Int]),
+                "foo",
+                vec![],
+                vec![
+                    LStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5)))),
+                    LStmt::For(
+                        Some(Expr::Atom(Atom::Num(1))),
+                        Some(Expr::Atom(Atom::Num(2))),
+                        None,
+                        vec![
+                            LStmt::VarDec(Type::Int, "x", None, Some(Expr::Atom(Atom::Num(5)))),
+                        ],
+                    ),
+                ],
+            ),
+        ]);
+        // println!("{:#?}", stmts);
+        println!("{:#?}", map);
+        assert!(map.errs.is_empty());
+    }
+
     #[test]
     fn integration_test() {
         let (stmts, map) = symbolify(vec![
@@ -361,7 +509,7 @@ mod tests {
             ),
             GStmt::VarDec(Type::Char, "y", None, None),
         ]);
-        println!("{:#?}", stmts);
+        // println!("{:#?}", stmts);
         println!("{:#?}", map);
     }
 
@@ -397,7 +545,7 @@ mod tests {
             ),
             GStmt::VarDec(Type::Char, "y", None, None),
         ]);
-        println!("{:#?}", stmts);
+        // println!("{:#?}", stmts);
         println!("{:#?}", map);
     }
 }
