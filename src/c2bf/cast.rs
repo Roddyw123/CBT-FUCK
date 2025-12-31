@@ -1,5 +1,6 @@
 pub mod ast {
     use std::fmt::Display;
+    use std::fmt::Debug;
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum Type {
@@ -28,15 +29,15 @@ pub mod ast {
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum Atom<'src> {
+    pub enum Atom<V> {
         Num(u32),
-        Var(&'src str),
-        Array(Box<Self>, Box<Expr<'src>>),
+        Var(V),
+        Array(Box<Self>, Box<Expr<V>>),
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum Expr<'src> {
-        Atom(Atom<'src>),
+    pub enum Expr<V> {
+        Atom(Atom<V>),
         Neg(Box<Self>),
         Add(Box<Self>, Box<Self>),
         Mul(Box<Self>, Box<Self>),
@@ -51,7 +52,7 @@ pub mod ast {
         Assignment(Box<Self>, Box<Self>),
     }
 
-    impl Display for Expr<'_> {
+    impl<V:Debug> Display for Expr<V> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 Expr::Atom(atom) => write!(f, "{:?}", atom),
@@ -80,35 +81,35 @@ pub mod ast {
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum LStmt<'src> {
+    pub enum LStmt<V> {
         VarDec(
             Type,
-            &'src str,
-            Option<Option<Expr<'src>>>,
-            Option<Expr<'src>>,
+            V,
+            Option<Option<Expr<V>>>,
+            Option<Expr<V>>,
         ),
-        While(Expr<'src>, Vec<Self>),
+        While(Expr< V>, Vec<Self>),
         Ifs(
-            (Expr<'src>, Vec<Self>),
-            Vec<(Expr<'src>, Vec<Self>)>,
+            (Expr<V>, Vec<Self>),
+            Vec<(Expr<V>, Vec<Self>)>,
             Option<Vec<Self>>,
         ),
         For(
-            Option<Expr<'src>>,
-            Option<Expr<'src>>,
-            Option<Expr<'src>>,
+            Option<Expr<V>>,
+            Option<Expr<V>>,
+            Option<Expr<V>>,
             Vec<Self>,
         ),
         FuncDec(
             Type,
-            &'src str,
-            Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>,
+            V,
+            Vec<(Type, V, Option<Option<Expr<V>>>)>,
             Vec<Self>,
         ),
-        Expr(Expr<'src>),
+        Expr(Expr<V>),
     }
 
-    impl Display for LStmt<'_> {
+    impl<V:Debug+Display> Display for LStmt<V> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 LStmt::VarDec(ty, name, arr, exp) => {
@@ -139,22 +140,22 @@ pub mod ast {
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum GStmt<'src> {
+    pub enum GStmt<V> {
         VarDec(
             Type,
-            &'src str,
-            Option<Option<Expr<'src>>>,
-            Option<Expr<'src>>,
+            V,
+            Option<Option<Expr<V>>>,
+            Option<Expr<V>>,
         ),
         FuncDec(
             Type,
-            &'src str,
-            Vec<(Type, &'src str, Option<Option<Expr<'src>>>)>,
-            Vec<LStmt<'src>>,
+            V,
+            Vec<(Type, V, Option<Option<Expr<V>>>)>,
+            Vec<LStmt<V>>,
         ),
     }
 
-    impl Display for GStmt<'_> {
+    impl<V:Debug+Display> Display for GStmt<V> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 GStmt::VarDec(ty, name, arr, exp) => {

@@ -10,7 +10,7 @@ use chumsky::{
     IterParser, Parser,
 };
 
-pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich<'src, char>>> {
+pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<&'src str>>, Err<Rich<'src, char>>> {
     // not mapped to Var immediatly as it can be a function as well
     // TODO: proper identifier parsing (regex probably)
     let ident = || text::ascii::ident().padded();
@@ -76,7 +76,7 @@ pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich
                     expr.clone()
                         .separated_by(just(',').padded())
                         .allow_trailing()
-                        .collect::<Vec<Expr>>()
+                        .collect::<Vec<Expr<_>>>()
                         .delimited_by(open_bracket(), close_bracket()),
                     |x, y, e| Expr::Call(Box::new(x), y),
                 ),
@@ -113,9 +113,9 @@ pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich
         stmt: S,
         open: O,
         close: C,
-    ) -> impl Parser<'src, I, Vec<LStmt<'src>>, E> + Clone
+    ) -> impl Parser<'src, I, Vec<LStmt<&'src str>>, E> + Clone
     where
-        S: Parser<'src, I, LStmt<'src>, E> + Clone,
+        S: Parser<'src, I, LStmt<&'src str>, E> + Clone,
         O: Parser<'src, I, char, E> + Clone,
         C: Parser<'src, I, char, E> + Clone,
         <I as Input<'src>>::Token: PartialEq,
@@ -124,7 +124,7 @@ pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich
         stmt.separated_by(just(';').repeated())
             .allow_trailing()
             .allow_leading()
-            .collect::<Vec<LStmt<'src>>>()
+            .collect::<Vec<LStmt<&'src str>>>()
             .delimited_by(open, close)
     }
 
@@ -150,21 +150,21 @@ pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich
                 open_curly_bracket(),
                 close_curly_bracket(),
             ))
-            .map(|(((ty, name), params), body)| {
-                (
-                    (
-                        (
-                            Type::Fn(
-                                Box::new(ty),
-                                params.iter().map(|((ty, name), arr)| ty.clone()).collect(),
-                            ),
-                            name,
-                        ),
-                        params,
-                    ),
-                    body,
-                )
-            })
+            // .map(|(((ty, name), params), body)| {
+            //     (
+            //         (
+            //             (
+            //                 Type::Fn(
+            //                     Box::new(ty),
+            //                     params.iter().map(|((ty, name), arr)| ty.clone()).collect(),
+            //                 ),
+            //                 name,
+            //             ),
+            //             params,
+            //         ),
+            //         body,
+            //     )
+            // })
     };
 
     let local_stmt = || {
@@ -183,7 +183,7 @@ pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich
                         .padded()
                         .ignore_then(x_statment("if"))
                         .repeated()
-                        .collect::<Vec<(Expr, Vec<LStmt>)>>(),
+                        .collect::<Vec<(Expr<_>, Vec<LStmt<_>>)>>(),
                 )
                 .then(text::keyword("else").padded().ignore_then(block()).or_not());
             let for_loop = text::keyword("for")
@@ -239,7 +239,7 @@ pub fn parser<'src>() -> impl Parser<'src, &'src str, Vec<GStmt<'src>>, Err<Rich
         .separated_by(sep().repeated())
         .allow_trailing()
         .allow_leading()
-        .collect::<Vec<GStmt>>()
+        .collect::<Vec<GStmt<_>>>()
     };
     global_stmts().padded()
 }
