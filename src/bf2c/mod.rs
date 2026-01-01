@@ -1,7 +1,87 @@
 mod localop;
 
 pub mod bf2c {
+    use std::fmt::Display;
+
     use indoc::indoc;
+
+    #[derive(Clone)]
+    pub enum Expr {
+        Num(i32),
+        Var(String),
+        Assignment(
+            Box<Self>, // lhs
+            Box<Self>, // rhs
+        ),
+        PlusEq(
+            Box<Self>, // lhs
+            Box<Self>, // rhs
+        ),
+        MinEq(
+            Box<Self>, // lhs
+            Box<Self>, // rhs
+        ),
+        Deref(Box<Self>),
+        Inc(Box<Self>),
+        Dec(Box<Self>),
+        Call(
+            Box<Self>, // funcion
+            Vec<Self>, // args
+        ),
+        Array(
+            Box<Self>, // array
+            Box<Self>, // indedx
+        )
+    }
+
+    #[derive(Clone)]
+    pub enum Stmt {
+        While(
+            Expr, // condition
+            Stmts, // body
+        ),
+        Expr(Expr),
+    }
+
+    #[derive(Clone)]
+    pub struct Stmts {
+        pub(crate) stmts: Vec<Stmt>
+    }
+
+    impl Display for Expr {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Expr::Num(n) => write!(f, "({})", n),
+                Expr::Var(v) => write!(f, "({})", v),
+                Expr::Assignment(expr, expr1) => write!(f, "({}={})", expr, expr1),
+                Expr::Deref(expr) => write!(f, "(*{})", expr),
+                Expr::Inc(expr) => write!(f, "({}++)", expr),
+                Expr::Dec(expr) => write!(f, "({}--)", expr),
+                Expr::Call(expr, exprs) => write!(f, "({}({})", expr, exprs.into_iter().map(|exp| exp.to_string()).collect::<Vec<_>>().join(", ")),
+                Expr::Array(expr, expr1) => write!(f, "({}[{}])", expr, expr1),
+                Expr::PlusEq(expr, expr1) => write!(f, "({}+={})", expr, expr1),
+                Expr::MinEq(expr, expr1) => write!(f, "({}-={})", expr, expr1),
+            }
+        }
+    }
+
+    impl Display for Stmt {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Stmt::While(expr, stmts) => write!(f, "while({}) {{{}}}", expr.to_string(), stmts.to_string().lines().map(|line| "  ".to_string()+line).collect::<Vec<_>>().join("\n")),
+                Stmt::Expr(expr) => write!(f, "{};", expr.to_string()),
+            }
+        }
+    }
+    impl Display for Stmts {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.stmts.clone().into_iter().map(|sym| sym.to_string()).collect::<Vec<String>>().join("\n"))
+        }
+    }
+
+    pub trait Emmitable<S> {
+        fn emit(&self) -> S;
+    }
 
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub enum BfSymbol {
@@ -48,6 +128,51 @@ pub mod bf2c {
             return Err("Brainfuck code is not well-formed (Brackets do not match)");
         }
         Ok(out)
+    }
+
+    struct BfSymbols {
+        symbols: Vec<BfSymbol>
+    }
+
+    impl Emmitable<Expr> for BfSymbol {
+        fn emit(&self) -> Expr {
+            match self {
+                BfSymbol::Left => Expr::Dec(Box::new(Expr::Var("ptr".to_string()))),
+                BfSymbol::Right => Expr::Inc(Box::new(Expr::Var("ptr".to_string()))),
+                BfSymbol::Plus => Expr::Inc(Box::new(Expr::Deref(Box::new(Expr::Var("ptr".to_string()))))),
+                BfSymbol::Minus => Expr::Dec(Box::new(Expr::Deref(Box::new(Expr::Var("ptr".to_string()))))),
+                BfSymbol::Period => Expr::Call(Box::new(Expr::Var("putchar".to_string())), vec![Expr::Deref(Box::new(Expr::Var("ptr".to_string())))]),
+                BfSymbol::Comma => Expr::Assignment(Box::new(Expr::Deref(Box::new(Expr::Var("ptr".to_string())))), Box::new(Expr::Call(Box::new(Expr::Var("getchar".to_string())), Vec::new()))),
+                _ => panic!("Impossible")
+            }
+        }
+    }
+
+    impl Emmitable<Stmts> for BfSymbols {
+        fn emit(&self) -> Stmts {
+            let mut result = Vec::new();
+            let mut stack = Vec::new();
+            for symbol in self.symbols.as_slice() {
+                if let sym @ (BfSymbol::OpenBracket | BfSymbol::CloseBracket) = symbol {
+                    match sym {
+                        BfSymbol::OpenBracket => {
+                            stack.push(result);
+                            result = Vec::new();
+                            continue;
+                        },
+                        BfSymbol::CloseBracket => {
+                            let tmp = Stmt::While(Expr::Deref(Box::new(Expr::Var("ptr".to_string()))), Stmts { stmts: result });
+                            result = stack.pop().unwrap();
+                            result.push(tmp);
+                            continue;
+                        },
+                        _ => panic!("Impossible")
+                    }
+                }
+                result.push(Stmt::Expr(symbol.emit()));
+            }
+            Stmts { stmts: result }
+        }
     }
 
     fn wrap_boilerplate(code: String) -> String {

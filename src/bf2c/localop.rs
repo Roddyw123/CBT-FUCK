@@ -1,6 +1,7 @@
 pub mod localop {
     use std::collections::{HashMap, HashSet};
 
+    use super::super::bf2c as bf2c;
     use super::super::bf2c::*;
 
     #[derive(Debug, PartialEq, Eq)]
@@ -20,6 +21,37 @@ pub mod localop {
         ZeroLoop,
         ScanLoop(i32),
         MultiplicationLoop(u8, HashSet<(i32, i32)>),
+    }
+
+    impl Emmitable<bf2c::Stmts> for Stmt {
+        fn emit(&self) -> bf2c::Stmts {
+            match self {
+                Stmt::Action(off, hash_map) => {
+                    let mut tmp = hash_map.iter()
+                        .map(|(k, v)| bf2c::Expr::PlusEq(Box::new(bf2c::Expr::Array(Box::new(bf2c::Expr::Var("ptr".to_string())), Box::new(bf2c::Expr::Num(*k)))), Box::new(bf2c::Expr::Num(*v))))
+                        .collect::<Vec<_>>();
+                    tmp.push(Expr::PlusEq(Box::new(Expr::Var("ptr".to_string())), Box::new(Expr::Num(*off))));
+                    
+                    Stmts { stmts: tmp.into_iter().map(|expr| bf2c::Stmt::Expr(expr)).collect() }
+                },
+                Stmt::Output(count) => todo!(),
+                Stmt::Input(count) => todo!(),
+                Stmt::ZeroLoop => Stmts { stmts: vec![bf2c::Stmt::Expr(Expr::Assignment(Box::new(Expr::Deref(Box::new(Expr::Var("ptr".to_string())))), Box::new(Expr::Num(0))))] },
+                Stmt::ScanLoop(dir) => Stmts { stmts: vec![bf2c::Stmt::While(Expr::Deref(Box::new(Expr::Inc(Box::new(Expr::Var("ptr".to_string()))))), Stmts { stmts: Vec::new() })] },
+                Stmt::MultiplicationLoop(mul, hash_set) => todo!(),
+                Stmt::Loop(prog) => Stmts { stmts: vec![bf2c::Stmt::While(Expr::Deref(Box::new(Expr::Inc(Box::new(Expr::Var("ptr".to_string()))))), prog.emit())] },
+            }
+        }
+    }
+
+    impl Emmitable<Stmts> for Prog {
+        fn emit(&self) -> Stmts {
+            match self {
+                Prog::Vec(stmts) => {
+                    Stmts { stmts: stmts.into_iter().flat_map(|stmt| stmt.emit().stmts).collect::<Vec<_>>() }
+                }
+            }
+        }
     }
 
     pub fn optimise_local(prog: Vec<BfSymbol>) -> Prog {
