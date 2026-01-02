@@ -1,4 +1,3 @@
-use super::BfSymbol;
 use std::collections::HashMap;
 pub type Prog = Vec<Stmt>;
 

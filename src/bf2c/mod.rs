@@ -1,3 +1,5 @@
+pub mod ir;
+pub mod ssa;
 pub mod bf2c {
     use indoc::indoc;
 
