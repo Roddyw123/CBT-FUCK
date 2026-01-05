@@ -79,8 +79,8 @@ impl SsaBuilder {
         for ir in r { 
              match ir {
                 Stmt::Add(delta) => {
-                    let new = self.new_var(self.ptr_offset);
-                    let src = self.get_offset_var(self.ptr_offset);
+                    let src = self.get_offset_var(self.ptr_offset);  // Get old version FIRST
+                    let new = self.new_var(self.ptr_offset);          // Then create new version
                     output.push(SsaStmt::Add(new, src, delta));
                 }
                 Stmt::Move(delta) => {
@@ -106,12 +106,14 @@ impl SsaBuilder {
                     // Create phi nodes at loop entry for all mutated variables
                     // Each phi merges the value before the loop with the value after loop body
                     let mut phi_nodes = Vec::new();
+                    let mut phi_dsts = HashMap::new();  // Track phi destinations
 
                     for &cell_offset in &mutated_variables {
                         let var_before = self.get_offset_var(cell_offset);
 
                         // Create new version for the phi node destination
                         let phi_dst = self.new_var(cell_offset);
+                        phi_dsts.insert(cell_offset, phi_dst);
 
                         // Placeholder phi node - we'll update incoming values later
                         phi_nodes.push(PhiNode {
@@ -225,11 +227,558 @@ impl SsaBuilder {
     }
 
 }
-fn ssa(ir: Prog) -> SsaProg {
+
+pub fn ssa(ir: Prog) -> SsaProg {
     let mut builder = SsaBuilder{ versions: HashMap::new(), ptr_offset: 0 };
     builder.ssa(ir)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bf2c::ir::Stmt;
 
-// [+?]
-// v1. v
+    #[test]
+    fn test_simple_add() {
+        // Test: single Add instruction
+        let ir = vec![Stmt::Add(5)];
+        let ssa = ssa(ir);
+
+        println!("Simple Add SSA: {:#?}", ssa);
+
+        assert_eq!(ssa.len(), 1);
+        match &ssa[0] {
+            SsaStmt::Add(dst, src, delta) => {
+                assert_eq!(dst, &(0, 1));  // First version of cell 0
+                assert_eq!(src, &(0, 0));  // Initial version (0)
+                assert_eq!(delta, &5);
+            }
+            _ => panic!("Expected Add"),
+        }
+    }
+
+    #[test]
+    fn test_set() {
+        // Test: Set instruction
+        let ir = vec![Stmt::Set(42)];
+        let ssa = ssa(ir);
+
+        println!("Set SSA: {:#?}", ssa);
+
+        assert_eq!(ssa.len(), 1);
+        match &ssa[0] {
+            SsaStmt::Set(dst, val) => {
+                assert_eq!(dst, &(0, 1));
+                assert_eq!(val, &42);
+            }
+            _ => panic!("Expected Set"),
+        }
+    }
+
+    #[test]
+    fn test_move_and_add() {
+        // Test: Move then Add
+        let ir = vec![
+            Stmt::Move(1),
+            Stmt::Add(3),
+        ];
+        let ssa = ssa(ir);
+
+        println!("Move+Add SSA: {:#?}", ssa);
+
+        assert_eq!(ssa.len(), 2);
+        match &ssa[0] {
+            SsaStmt::Move(delta) => assert_eq!(delta, &1),
+            _ => panic!("Expected Move"),
+        }
+        match &ssa[1] {
+            SsaStmt::Add(dst, src, delta) => {
+                assert_eq!(dst, &(1, 1));  // Cell 1, version 1
+                assert_eq!(src, &(1, 0));  // Cell 1, version 0
+                assert_eq!(delta, &3);
+            }
+            _ => panic!("Expected Add"),
+        }
+    }
+
+    #[test]
+    fn test_simple_loop() {
+        // Test: [-] (decrement until zero)
+        let ir = vec![
+            Stmt::Loop(vec![Stmt::Add(-1)])
+        ];
+        let ssa = ssa(ir);
+
+        println!("Simple Loop [-] SSA: {:#?}", ssa);
+
+        assert_eq!(ssa.len(), 1);
+        match &ssa[0] {
+            SsaStmt::Loop(control_var, body, phi_nodes) => {
+                // Control variable should be the phi node version
+                assert_eq!(control_var, &(0, 1));
+
+                // Body should have one Add
+                assert_eq!(body.len(), 1);
+                match &body[0] {
+                    SsaStmt::Add(dst, src, delta) => {
+                        assert_eq!(dst, &(0, 2));  // v2 = ...
+                        assert_eq!(src, &(0, 1));  // ... v1 + (-1)
+                        assert_eq!(delta, &-1);
+                    }
+                    _ => panic!("Expected Add in loop body"),
+                }
+
+                // Should have one phi node for cell 0
+                assert_eq!(phi_nodes.len(), 1);
+                assert_eq!(phi_nodes[0].dst, (0, 1));
+                assert_eq!(phi_nodes[0].incoming.len(), 2);
+                assert_eq!(phi_nodes[0].incoming[0], (0, 0));  // Before loop
+                assert_eq!(phi_nodes[0].incoming[1], (0, 2));  // After body
+            }
+            _ => panic!("Expected Loop"),
+        }
+    }
+
+    #[test]
+    fn test_loop_with_multiple_cells() {
+        // Test: [+>-<] (increment cell[0], decrement cell[1])
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Add(1),     // +
+                Stmt::Move(1),    // >
+                Stmt::Add(-1),    // -
+                Stmt::Move(-1),   // <
+            ])
+        ];
+        let ssa = ssa(ir);
+
+        println!("Loop [+>-<] SSA: {:#?}", ssa);
+
+        match &ssa[0] {
+            SsaStmt::Loop(control_var, body, phi_nodes) => {
+                // Should have phi nodes for cells 0 and 1
+                assert_eq!(phi_nodes.len(), 2);
+
+                // Both cells should have phi nodes
+                let cell_offsets: Vec<i32> = phi_nodes.iter().map(|p| p.dst.0).collect();
+                assert!(cell_offsets.contains(&0));
+                assert!(cell_offsets.contains(&1));
+            }
+            _ => panic!("Expected Loop"),
+        }
+    }
+
+    #[test]
+    fn test_input_output() {
+        // Test: ,. (input then output)
+        let ir = vec![
+            Stmt::Input(0),
+            Stmt::Output(0),
+        ];
+        let ssa = ssa(ir);
+
+        println!("Input/Output SSA: {:#?}", ssa);
+
+        assert_eq!(ssa.len(), 2);
+        match &ssa[0] {
+            SsaStmt::Input(dst) => assert_eq!(dst, &(0, 1)),
+            _ => panic!("Expected Input"),
+        }
+        match &ssa[1] {
+            SsaStmt::Output(src) => assert_eq!(src, &(0, 1)),
+            _ => panic!("Expected Output"),
+        }
+    }
+
+    #[test]
+    fn test_multiplication_loop() {
+        // Test: MultiplicationLoop with effects at offsets 1 and 2
+        let ir = vec![
+            Stmt::MultiplicationLoop(1, vec![(1, 2), (2, 3)])
+        ];
+        let ssa = ssa(ir);
+
+        println!("MultiplicationLoop SSA: {:#?}", ssa);
+
+        assert_eq!(ssa.len(), 1);
+        match &ssa[0] {
+            SsaStmt::MultiplicationLoop(decr, ctrl, effects) => {
+                assert_eq!(decr, &1);
+                assert_eq!(ctrl, &(0, 0));  // Control cell before modification
+                assert_eq!(effects.len(), 2);
+                // Each effect should have dst and src versions
+                assert_eq!(effects[0].0, (1, 1));  // dst
+                assert_eq!(effects[0].1, (1, 0));  // src
+                assert_eq!(effects[0].2, 2);       // factor
+            }
+            _ => panic!("Expected MultiplicationLoop"),
+        }
+    }
+
+    // ==================== COMPLEX LOOP TESTS ====================
+
+    #[test]
+    fn test_nested_loops_simple() {
+        // Test: [[+]] - nested loop that increments cell[0]
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Loop(vec![
+                    Stmt::Add(1)
+                ])
+            ])
+        ];
+        let ssa = ssa(ir);
+
+        println!("Nested Loop [[+]] SSA: {:#?}", ssa);
+
+        // Outer loop
+        match &ssa[0] {
+            SsaStmt::Loop(outer_control, outer_body, outer_phi) => {
+                // Outer control var should be v1 (phi node)
+                assert_eq!(outer_control, &(0, 1));
+
+                // Outer phi: cell[0] gets phi node
+                assert_eq!(outer_phi.len(), 1);
+                assert_eq!(outer_phi[0].dst, (0, 1));
+                assert_eq!(outer_phi[0].incoming[0], (0, 0));  // Before outer loop
+
+                // Inner loop
+                assert_eq!(outer_body.len(), 1);
+                match &outer_body[0] {
+                    SsaStmt::Loop(inner_control, inner_body, inner_phi) => {
+                        // Inner control should be v2 (inner phi)
+                        assert_eq!(inner_control, &(0, 2));
+
+                        // Inner phi: cell[0] gets phi node
+                        assert_eq!(inner_phi.len(), 1);
+                        assert_eq!(inner_phi[0].dst, (0, 2));
+                        assert_eq!(inner_phi[0].incoming[0], (0, 1));  // v1 from outer phi
+
+                        // Add inside inner loop
+                        match &inner_body[0] {
+                            SsaStmt::Add(dst, src, delta) => {
+                                assert_eq!(dst, &(0, 3));   // v3 =
+                                assert_eq!(src, &(0, 2));   // v2 + 1
+                                assert_eq!(delta, &1);
+                            }
+                            _ => panic!("Expected Add"),
+                        }
+
+                        // Inner phi incoming should have v3 from body
+                        assert_eq!(inner_phi[0].incoming[1], (0, 3));
+                    }
+                    _ => panic!("Expected inner Loop"),
+                }
+
+                // Outer phi incoming should have final version from inner loop (v3)
+                assert_eq!(outer_phi[0].incoming[1], (0, 3));
+            }
+            _ => panic!("Expected outer Loop"),
+        }
+    }
+
+    #[test]
+    fn test_nested_loops_different_cells() {
+        // Test: [+[->+<]] - outer increments cell[0], inner transfers cell[1] to cell[2]
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Add(1),         // +
+                Stmt::Loop(vec![      // [
+                    Stmt::Add(-1),    // -
+                    Stmt::Move(1),    // >
+                    Stmt::Add(1),     // +
+                    Stmt::Move(-1),   // <
+                ]),                   // ]
+            ])
+        ];
+        let ssa = ssa(ir);
+
+        println!("Nested Loop [+[->+<]] SSA: {:#?}", ssa);
+
+        match &ssa[0] {
+            SsaStmt::Loop(outer_control, outer_body, outer_phi) => {
+                // Outer loop modifies cell[0] and cell[1] (via inner loop)
+                assert_eq!(outer_phi.len(), 2);
+
+                // Find phi nodes for each cell
+                let cell0_phi = outer_phi.iter().find(|p| p.dst.0 == 0).unwrap();
+                let cell1_phi = outer_phi.iter().find(|p| p.dst.0 == 1).unwrap();
+
+                // Verify phi nodes have correct structure
+                assert_eq!(cell0_phi.incoming.len(), 2);
+                assert_eq!(cell1_phi.incoming.len(), 2);
+
+                // cell[0] phi: incoming[0] should be (0, 0)
+                assert_eq!(cell0_phi.incoming[0], (0, 0));
+
+                // cell[1] phi: incoming[0] should be (1, 0)
+                assert_eq!(cell1_phi.incoming[0], (1, 0));
+            }
+            _ => panic!("Expected Loop"),
+        }
+    }
+
+    #[test]
+    fn test_loop_not_modifying_control_cell() {
+        // Test: [>+<] - loop that increments cell[1] but not cell[0]
+        // This tests that control variable is NOT a phi node
+        let ir = vec![
+            Stmt::Add(5),        // Set cell[0] to 5
+            Stmt::Loop(vec![     // While cell[0] != 0
+                Stmt::Move(1),   // >
+                Stmt::Add(1),    // +
+                Stmt::Move(-1),  // <
+            ])
+        ];
+        let ssa = ssa(ir);
+
+        println!("Loop [>+<] not modifying control cell SSA: {:#?}", ssa);
+
+        assert_eq!(ssa.len(), 2);
+
+        // First: Add
+        match &ssa[0] {
+            SsaStmt::Add(dst, src, delta) => {
+                assert_eq!(dst, &(0, 1));
+                assert_eq!(src, &(0, 0));
+                assert_eq!(delta, &5);
+            }
+            _ => panic!("Expected Add"),
+        }
+
+        // Second: Loop
+        match &ssa[1] {
+            SsaStmt::Loop(control_var, body, phi_nodes) => {
+                // IMPORTANT: Control variable should be (0, 1), NOT a phi node
+                // because cell[0] is not modified in the loop
+                assert_eq!(control_var, &(0, 1));
+
+                // Only cell[1] should have a phi node
+                assert_eq!(phi_nodes.len(), 1);
+                assert_eq!(phi_nodes[0].dst.0, 1);  // cell[1]
+
+                // Verify cell[1] phi
+                assert_eq!(phi_nodes[0].incoming[0], (1, 0));  // Before loop
+                assert_eq!(phi_nodes[0].incoming.len(), 2);
+
+                // Body should have: Move(1), Add, Move(-1)
+                assert_eq!(body.len(), 3);
+            }
+            _ => panic!("Expected Loop"),
+        }
+    }
+
+    #[test]
+    fn test_sequential_loops() {
+        // Test: [+][+] - two sequential loops, both increment cell[0]
+        let ir = vec![
+            Stmt::Loop(vec![Stmt::Add(1)]),   // First loop
+            Stmt::Loop(vec![Stmt::Add(1)]),   // Second loop
+        ];
+        let ssa = ssa(ir);
+
+        println!("Sequential Loops [+][+] SSA: {:#?}", ssa);
+
+        assert_eq!(ssa.len(), 2);
+
+        // First loop
+        match &ssa[0] {
+            SsaStmt::Loop(control1, body1, phi1) => {
+                assert_eq!(control1, &(0, 1));  // First phi
+                assert_eq!(phi1.len(), 1);
+                assert_eq!(phi1[0].dst, (0, 1));
+                assert_eq!(phi1[0].incoming[0], (0, 0));  // Initial
+                assert_eq!(phi1[0].incoming[1], (0, 2));  // After body
+
+                match &body1[0] {
+                    SsaStmt::Add(dst, src, _) => {
+                        assert_eq!(dst, &(0, 2));
+                        assert_eq!(src, &(0, 1));
+                    }
+                    _ => panic!("Expected Add"),
+                }
+            }
+            _ => panic!("Expected first Loop"),
+        }
+
+        // Second loop
+        match &ssa[1] {
+            SsaStmt::Loop(control2, body2, phi2) => {
+                assert_eq!(control2, &(0, 3));  // Second phi
+                assert_eq!(phi2.len(), 1);
+                assert_eq!(phi2[0].dst, (0, 3));
+                assert_eq!(phi2[0].incoming[0], (0, 2));  // From first loop!
+                assert_eq!(phi2[0].incoming[1], (0, 4));  // After body
+
+                match &body2[0] {
+                    SsaStmt::Add(dst, src, _) => {
+                        assert_eq!(dst, &(0, 4));
+                        assert_eq!(src, &(0, 3));
+                    }
+                    _ => panic!("Expected Add"),
+                }
+            }
+            _ => panic!("Expected second Loop"),
+        }
+    }
+
+    #[test]
+    fn test_loop_with_moves_balanced() {
+        // Test: [>+>+<<-] - loop that moves right, does work, then returns
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Move(1),    // >
+                Stmt::Add(1),     // +
+                Stmt::Move(1),    // >
+                Stmt::Add(1),     // +
+                Stmt::Move(-2),   // <<
+                Stmt::Add(-1),    // -
+            ])
+        ];
+        let ssa = ssa(ir);
+
+        println!("Loop with moves [>+>+<<-] SSA: {:#?}", ssa);
+
+        match &ssa[0] {
+            SsaStmt::Loop(control_var, body, phi_nodes) => {
+                // Should have phi nodes for cells 0, 1, and 2
+                assert_eq!(phi_nodes.len(), 3);
+
+                let cells: Vec<i32> = phi_nodes.iter().map(|p| p.dst.0).collect();
+                assert!(cells.contains(&0));
+                assert!(cells.contains(&1));
+                assert!(cells.contains(&2));
+
+                // Each phi should have 2 incoming values
+                for phi in phi_nodes {
+                    assert_eq!(phi.incoming.len(), 2,
+                        "Phi for cell {} should have 2 incoming values", phi.dst.0);
+
+                    // Verify incoming[0] has version 0 (before loop)
+                    assert_eq!(phi.incoming[0].1, 0,
+                        "Phi for cell {} should have version 0 as incoming[0]", phi.dst.0);
+                }
+
+                // Control variable should be phi for cell[0]
+                let cell0_phi = phi_nodes.iter().find(|p| p.dst.0 == 0).unwrap();
+                assert_eq!(control_var, &cell0_phi.dst);
+            }
+            _ => panic!("Expected Loop"),
+        }
+    }
+
+    #[test]
+    fn test_complex_nested_with_multiple_cells() {
+        // Test: [>+[<+>-]<-] - Complex nested loop with multiple cells
+        // Outer: moves right, inner loop, moves left, decrements
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Move(1),         // > (at cell 1)
+                Stmt::Add(1),          // +
+                Stmt::Loop(vec![       // [
+                    Stmt::Move(-1),    //   < (at cell 0)
+                    Stmt::Add(1),      //   +
+                    Stmt::Move(1),     //   > (at cell 1)
+                    Stmt::Add(-1),     //   -
+                ]),                    // ]
+                Stmt::Move(-1),        // < (at cell 0)
+                Stmt::Add(-1),         // -
+            ])
+        ];
+        let ssa = ssa(ir);
+
+        println!("Complex nested [>+[<+>-]<-] SSA: {:#?}", ssa);
+
+        match &ssa[0] {
+            SsaStmt::Loop(outer_control, outer_body, outer_phi) => {
+                // Outer loop modifies both cell[0] and cell[1]
+                assert_eq!(outer_phi.len(), 2);
+
+                let cell0_phi = outer_phi.iter().find(|p| p.dst.0 == 0).unwrap();
+                let cell1_phi = outer_phi.iter().find(|p| p.dst.0 == 1).unwrap();
+
+                // Verify phi structure
+                assert_eq!(cell0_phi.incoming.len(), 2);
+                assert_eq!(cell1_phi.incoming.len(), 2);
+
+                // Check that outer control uses cell[0] phi
+                assert_eq!(outer_control, &cell0_phi.dst);
+
+                // Find inner loop in body
+                let inner_loop_pos = outer_body.iter().position(|stmt| {
+                    matches!(stmt, SsaStmt::Loop(_, _, _))
+                }).expect("Should have inner loop");
+
+                match &outer_body[inner_loop_pos] {
+                    SsaStmt::Loop(inner_control, inner_body, inner_phi) => {
+                        // Inner loop also modifies both cells
+                        assert_eq!(inner_phi.len(), 2);
+
+                        // Verify each inner phi has 2 incoming values
+                        for phi in inner_phi {
+                            assert_eq!(phi.incoming.len(), 2);
+                        }
+
+                        // Inner body should have operations
+                        assert!(inner_body.len() > 0);
+                    }
+                    _ => panic!("Expected inner Loop"),
+                }
+            }
+            _ => panic!("Expected outer Loop"),
+        }
+    }
+
+    #[test]
+    fn test_loop_modifying_many_cells() {
+        // Test: [+>+>+>+<<<<-] - loop that modifies 4 cells
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Add(1),     // cell[0] +
+                Stmt::Move(1),    // >
+                Stmt::Add(1),     // cell[1] +
+                Stmt::Move(1),    // >
+                Stmt::Add(1),     // cell[2] +
+                Stmt::Move(1),    // >
+                Stmt::Add(1),     // cell[3] +
+                Stmt::Move(-3),   // <<<
+                Stmt::Add(-1),    // cell[0] -
+            ])
+        ];
+        let ssa = ssa(ir);
+
+        println!("Loop modifying many cells [+>+>+>+<<<<-] SSA: {:#?}", ssa);
+
+        match &ssa[0] {
+            SsaStmt::Loop(control_var, _body, phi_nodes) => {
+                // Should have phi nodes for cells 0, 1, 2, 3
+                assert_eq!(phi_nodes.len(), 4, "Should have 4 phi nodes");
+
+                let cells: Vec<i32> = phi_nodes.iter().map(|p| p.dst.0).collect();
+                assert!(cells.contains(&0), "Should have phi for cell 0");
+                assert!(cells.contains(&1), "Should have phi for cell 1");
+                assert!(cells.contains(&2), "Should have phi for cell 2");
+                assert!(cells.contains(&3), "Should have phi for cell 3");
+
+                // All phis should have exactly 2 incoming values
+                for phi in phi_nodes {
+                    assert_eq!(phi.incoming.len(), 2,
+                        "Phi for cell {} should have exactly 2 incoming", phi.dst.0);
+
+                    // First incoming should be version 0 (initial state)
+                    assert_eq!(phi.incoming[0], (phi.dst.0, 0),
+                        "First incoming for cell {} should be initial version", phi.dst.0);
+
+                    // Second incoming should be from the loop body (version > 0)
+                    assert!(phi.incoming[1].1 > 0,
+                        "Second incoming for cell {} should be from loop body", phi.dst.0);
+                }
+
+                // Control variable should be phi for cell[0]
+                let cell0_phi = phi_nodes.iter().find(|p| p.dst.0 == 0).unwrap();
+                assert_eq!(control_var, &cell0_phi.dst);
+            }
+            _ => panic!("Expected Loop"),
+        }
+    }
+}
