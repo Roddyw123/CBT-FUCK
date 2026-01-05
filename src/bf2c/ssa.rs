@@ -97,6 +97,16 @@ impl SsaBuilder {
                     output.push(SsaStmt::Input(new));
                 }
                 Stmt::Loop(body) => {
+                    let net_movement = self.calculate_net_movement(&body);
+                    if net_movement != 0 {
+                        panic!(
+                            "Unbalanced loop detected with net pointer movement of {}. \
+                            Only balanced loops (net movement = 0) are supported in SSA. \
+                            Scan loops like [>] or [<] should be optimized to ScanLoop during IR generation.",
+                            net_movement
+                        );
+                    }
+
                     let control_cell = self.current_cell();
                     let ptr_before = self.ptr_offset;
 
@@ -143,8 +153,8 @@ impl SsaBuilder {
                         self.get_offset_var(control_cell)
                     };
 
-                    // Restore pointer offset (loop body might have moved it)
-                    // self.ptr_offset = ptr_before;
+                    // Restore pointer offset - balanced loops always return to start position
+                    self.ptr_offset = ptr_before;
 
                     output.push(SsaStmt::Loop(control_var, ssa_body, phi_nodes));
                 }
@@ -224,6 +234,32 @@ impl SsaBuilder {
             }
         }
         modified
+    }
+
+    // Calculates the net pointer movement of a program.
+    // Returns 0 for balanced programs (pointer returns to starting position).
+    // Panics if nested loops are unbalanced.
+    fn calculate_net_movement(&self, prog: &Prog) -> i32 {
+        let mut net_movement = 0;
+        for stmt in prog {
+            match stmt {
+                Stmt::Move(delta) => {
+                    net_movement += delta;
+                }
+                Stmt::Loop(body) => {
+                    let inner_net = self.calculate_net_movement(body);
+                    if inner_net != 0 {
+                        panic!(
+                            "Nested loop has unbalanced pointer movement (net movement: {}). \
+                            Only balanced loops (net movement = 0) are supported in SSA.",
+                            inner_net
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+        net_movement
     }
 
 }
@@ -726,6 +762,140 @@ mod tests {
                 }
             }
             _ => panic!("Expected outer Loop"),
+        }
+    }
+
+    // ==================== UNBALANCED LOOP TESTS ====================
+
+    #[test]
+    #[should_panic(expected = "Unbalanced loop detected with net pointer movement of 1")]
+    fn test_unbalanced_loop_move_right() {
+        // Test: [>-] - moves right and decrements (unbalanced)
+        // This should panic because net movement is +1
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Move(1),    // >
+                Stmt::Add(-1),    // -
+            ])
+        ];
+        let _ssa = ssa(ir);  // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "Unbalanced loop detected with net pointer movement of -1")]
+    fn test_unbalanced_loop_move_left() {
+        // Test: [<+] - moves left and increments (unbalanced)
+        // This should panic because net movement is -1
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Move(-1),   // <
+                Stmt::Add(1),     // +
+            ])
+        ];
+        let _ssa = ssa(ir);  // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "Unbalanced loop detected with net pointer movement of 2")]
+    fn test_unbalanced_loop_large_movement() {
+        // Test: [>>+] - moves right by 2 and increments (unbalanced)
+        // This should panic because net movement is +2
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Move(2),    // >>
+                Stmt::Add(1),     // +
+            ])
+        ];
+        let _ssa = ssa(ir);  // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "Nested loop has unbalanced pointer movement")]
+    fn test_nested_unbalanced_loop() {
+        // Test: [[>+]] - nested loop with unbalanced inner loop
+        // This should panic when processing the inner loop
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Loop(vec![
+                    Stmt::Move(1),    // >
+                    Stmt::Add(1),     // +
+                ])
+            ])
+        ];
+        let _ssa = ssa(ir);  // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "Nested loop has unbalanced pointer movement")]
+    fn test_balanced_outer_unbalanced_inner() {
+        // Test: [>[-<]<] - balanced outer loop, but unbalanced inner loop
+        // The outer loop is balanced (net movement = 0), but inner is not
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Move(1),       // >
+                Stmt::Loop(vec![     // Inner loop is unbalanced
+                    Stmt::Add(-1),   // -
+                    Stmt::Move(-1),  // <
+                ]),
+                Stmt::Move(-1),      // <
+            ])
+        ];
+        let _ssa = ssa(ir);  // Should panic when processing inner loop
+    }
+
+    #[test]
+    fn test_balanced_loop_with_complex_movement() {
+        // Test: [>>>+<<<-] - balanced loop with complex movement pattern
+        // Net movement = 0, so should succeed
+        let ir = vec![
+            Stmt::Loop(vec![
+                Stmt::Move(3),    // >>>
+                Stmt::Add(1),     // +
+                Stmt::Move(-3),   // <<<
+                Stmt::Add(-1),    // -
+            ])
+        ];
+        let ssa = ssa(ir);
+
+        println!("Balanced complex movement [>>>+<<<-] SSA: {:#?}", ssa);
+
+        // Should successfully convert with phi nodes for cells 0 and 3
+        match &ssa[0] {
+            SsaStmt::Loop(_control_var, _body, phi_nodes) => {
+                assert_eq!(phi_nodes.len(), 2);
+                let cells: Vec<i32> = phi_nodes.iter().map(|p| p.dst.0).collect();
+                assert!(cells.contains(&0));
+                assert!(cells.contains(&3));
+            }
+            _ => panic!("Expected Loop"),
+        }
+    }
+
+    #[test]
+    fn test_pointer_offset_restoration() {
+        // Test that pointer offset is properly restored after a balanced loop
+        let ir = vec![
+            Stmt::Move(2),        // >> (move to cell 2)
+            Stmt::Loop(vec![      // Balanced loop
+                Stmt::Move(1),    // >
+                Stmt::Add(1),     // +
+                Stmt::Move(-1),   // <
+                Stmt::Add(-1),    // -
+            ]),
+            Stmt::Add(5),         // + (should apply to cell 2, not cell 3!)
+        ];
+        let ssa = ssa(ir);
+
+        println!("Pointer offset restoration test SSA: {:#?}", ssa);
+
+        // The last Add should be at cell 2, not cell 3
+        match &ssa[2] {
+            SsaStmt::Add(dst, src, delta) => {
+                assert_eq!(dst.0, 2, "After loop, pointer should be back at cell 2");
+                assert_eq!(src.0, 2);
+                assert_eq!(delta, &5);
+            }
+            _ => panic!("Expected Add as third statement"),
         }
     }
 
