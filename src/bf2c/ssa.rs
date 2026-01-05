@@ -1,6 +1,6 @@
 // https://en.wikipedia.org/wiki/Static_single-assignment_form
 use super::ir::{Prog, Stmt};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub type SsaVar = (i32, u32);
 
@@ -97,6 +97,12 @@ impl SsaBuilder {
                     output.push(SsaStmt::Input(new));
                 }
                 Stmt::Loop(body) => {
+                    let control_cell = self.current_cell();
+                    let control_cell_before = self.get_offset_var(control_cell);
+                    let versions_before = self.versions.clone();
+                    let ptr_before = self.ptr_offset;
+                    self.analyze(&body, ptr_before);
+
                     todo!();
                 }
                 Stmt::ZeroLoop => { 
@@ -117,6 +123,47 @@ impl SsaBuilder {
            
         }
         output
+    }
+
+    // Takes a program and offset. Returns a set containing all variables/offsets that have been
+    // modified by the program. Handles inner loops via recursion.
+    fn analyze(&mut self, prog: &Prog, start_offset: i32) -> HashSet<i32> {
+        let mut modified: HashSet<i32> = HashSet::new();
+        let mut offset = start_offset;
+        for stmt in prog {
+            match stmt {
+                Stmt::Add(_) => {
+                    modified.insert(offset);
+                }
+                Stmt::Move(delta) => {
+                    offset = offset + delta;
+                }
+                Stmt::Output(outp) => {
+                    offset = offset + outp;
+                }
+                Stmt::Input(inp) => {
+                    modified.insert(offset);
+                }
+                Stmt::Loop(_) => {
+                    let inner_loop_modified = self.analyze(prog, offset);
+                    modified.extend(inner_loop_modified);
+                }
+                Stmt::ZeroLoop => {
+                    modified.insert(offset);
+                }
+                Stmt::ScanLoop(_) => {
+
+                }
+                Stmt::MultiplicationLoop(_, _) => {
+                    let inner_loop_modified = self.analyze(prog, offset);
+                    modified.extend(inner_loop_modified);
+                }
+                Stmt::Set(_) => {
+                    modified.insert(offset);
+                }
+            }
+        }
+        modified
     }
 }
 fn ssa(ir: Prog) -> SsaProg {
