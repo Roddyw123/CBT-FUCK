@@ -37,8 +37,8 @@ pub enum SsaStmt {
 /// Phi node for merging values at control flow join points
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PhiNode {
-    pub dst: SsaVar,
-    pub incoming: Vec<SsaVar>,
+    pub dst: SsaVar, // The variable being assigned to
+    pub incoming: Vec<SsaVar>, // Variables (versions)
 }
 
 /// SSA Builder - transforms IR to SSA form
@@ -98,12 +98,53 @@ impl SsaBuilder {
                 }
                 Stmt::Loop(body) => {
                     let control_cell = self.current_cell();
-                    let control_cell_before = self.get_offset_var(control_cell);
-                    let versions_before = self.versions.clone();
                     let ptr_before = self.ptr_offset;
-                    self.analyze(&body, ptr_before);
 
-                    todo!();
+                    // Find all variables modified by the loop
+                    let mutated_variables = self.analyze(&body, ptr_before);
+
+                    // Create phi nodes at loop entry for all mutated variables
+                    // Each phi merges the value before the loop with the value after loop body
+                    let mut phi_nodes = Vec::new();
+
+                    for &cell_offset in &mutated_variables {
+                        let var_before = self.get_offset_var(cell_offset);
+
+                        // Create new version for the phi node destination
+                        let phi_dst = self.new_var(cell_offset);
+
+                        // Placeholder phi node - we'll update incoming values later
+                        phi_nodes.push(PhiNode {
+                            dst: phi_dst,
+                            incoming: vec![var_before], // Will add after-body version later
+                        });
+                    }
+
+                    // Convert the loop body with phi destinations as current versions
+                    let ssa_body = self.convert_ssa(body);
+
+                    // Now collect the versions after the loop body for phi nodes
+                    for phi in phi_nodes.iter_mut() {
+                        let cell_offset = phi.dst.0;
+                        let var_after = self.get_offset_var(cell_offset);
+                        phi.incoming.push(var_after);
+                    }
+
+                    // The control variable for the loop condition
+                    let control_var = if mutated_variables.contains(&control_cell) {
+                        // If control cell is modified, use its phi node
+                        phi_nodes.iter()
+                            .find(|p| p.dst.0 == control_cell)
+                            .map(|p| p.dst)
+                            .unwrap_or_else(|| self.get_offset_var(control_cell))
+                    } else {
+                        self.get_offset_var(control_cell)
+                    };
+
+                    // Restore pointer offset (loop body might have moved it)
+                    // self.ptr_offset = ptr_before;
+
+                    output.push(SsaStmt::Loop(control_var, ssa_body, phi_nodes));
                 }
                 Stmt::ZeroLoop => { 
                     let new = self.new_var(self.ptr_offset);
@@ -113,7 +154,21 @@ impl SsaBuilder {
                     output.push(SsaStmt::ScanLoop(dir));
                 }
                 Stmt::MultiplicationLoop(decrement, effects) => {
-                    todo!()
+                    let control_cell = self.current_cell();
+                    let control_var = self.get_offset_var(control_cell);
+
+                    let mut ssa_effects = Vec::new();
+                    for (cell_offset, factor) in effects {
+                        let src = self.get_offset_var(self.ptr_offset + cell_offset);
+                        let dst = self.new_var(self.ptr_offset + cell_offset);
+                        ssa_effects.push((dst, src, factor));
+                    }
+
+                    // The control cell is also modified (decremented to 0)
+                    // We need to create a new version for it
+                    let _new_control = self.new_var(control_cell);
+
+                    output.push(SsaStmt::MultiplicationLoop(decrement, control_var, ssa_effects));
                 }
                 Stmt::Set(val) => {
                     let new = self.new_var(self.ptr_offset);
@@ -138,25 +193,28 @@ impl SsaBuilder {
                 Stmt::Move(delta) => {
                     offset = offset + delta;
                 }
-                Stmt::Output(outp) => {
-                    offset = offset + outp;
+                Stmt::Output(_) => {
+                    // Output doesn't modify anything
                 }
                 Stmt::Input(inp) => {
-                    modified.insert(offset);
+                    modified.insert(offset + inp);
                 }
-                Stmt::Loop(_) => {
-                    let inner_loop_modified = self.analyze(prog, offset);
+                Stmt::Loop(body) => {
+                    let inner_loop_modified = self.analyze(body, offset);
                     modified.extend(inner_loop_modified);
                 }
                 Stmt::ZeroLoop => {
                     modified.insert(offset);
                 }
                 Stmt::ScanLoop(_) => {
-
+                    // ScanLoop doesn't modify the current cell, just moves pointer
                 }
-                Stmt::MultiplicationLoop(_, _) => {
-                    let inner_loop_modified = self.analyze(prog, offset);
-                    modified.extend(inner_loop_modified);
+                Stmt::MultiplicationLoop(_, effects) => {
+                    // MultiplicationLoop modifies the control cell and effect cells
+                    modified.insert(offset);
+                    for (cell_offset, _) in effects {
+                        modified.insert(offset + cell_offset);
+                    }
                 }
                 Stmt::Set(_) => {
                     modified.insert(offset);
@@ -165,6 +223,7 @@ impl SsaBuilder {
         }
         modified
     }
+
 }
 fn ssa(ir: Prog) -> SsaProg {
     let mut builder = SsaBuilder{ versions: HashMap::new(), ptr_offset: 0 };
