@@ -98,21 +98,19 @@ impl SsaBuilder {
                 }
                 Stmt::Loop(body) => {
                     let net_movement = self.calculate_net_movement(&body);
+                    let mutated_variables = self.analyze(&body, self.ptr_offset);
+                    // if no net pointer movement, keep all versions
+                    // otherwise discard all versions
                     if net_movement != 0 {
-                        panic!(
-                            "Unbalanced loop detected with net pointer movement of {}. \
-                            Only balanced loops (net movement = 0) are supported in SSA. \
-                            Scan loops like [>] or [<] should be optimized to ScanLoop during IR generation.",
-                            net_movement
-                        );
+                        // new_var will overwrite the rest
+                        let tmp: Vec<_> = self.versions.keys().cloned().collect();
+                        tmp.into_iter().filter(|offset| !mutated_variables.contains(offset))
+                            .for_each(|offset|{
+                                self.new_var(offset);
+                            });
                     }
-
-                    let control_cell = self.current_cell();
-                    let ptr_before = self.ptr_offset;
-
-                    // Find all variables modified by the loop
-                    let mutated_variables = self.analyze(&body, ptr_before);
-
+                    
+                    
                     // Create phi nodes at loop entry for all mutated variables
                     // Each phi merges the value before the loop with the value after loop body
                     let mut phi_nodes = Vec::new();
@@ -138,25 +136,22 @@ impl SsaBuilder {
                     // Now collect the versions after the loop body for phi nodes
                     for phi in phi_nodes.iter_mut() {
                         let cell_offset = phi.dst.0;
-                        let var_after = self.get_offset_var(cell_offset);
+                        let var_after = self.get_offset_var(cell_offset+net_movement);
                         phi.incoming.push(var_after);
                     }
 
                     // The control variable for the loop condition
-                    let control_var = if mutated_variables.contains(&control_cell) {
-                        // If control cell is modified, use its phi node
-                        phi_nodes.iter()
-                            .find(|p| p.dst.0 == control_cell)
-                            .map(|p| p.dst)
-                            .unwrap_or_else(|| self.get_offset_var(control_cell))
+                    let control_var = self.get_offset_var(net_movement);
+
+                    // Restore pointer offset - reset if imbalanced loop
+                    self.ptr_offset = if net_movement == 0 {
+                        self.ptr_offset
                     } else {
-                        self.get_offset_var(control_cell)
+                        0
                     };
-
-                    // Restore pointer offset - balanced loops always return to start position
-                    self.ptr_offset = ptr_before;
-
-                    output.push(SsaStmt::Loop(control_var, ssa_body, phi_nodes));
+                    let mut true_body = phi_nodes.into_iter().map(|phi| SsaStmt::Phi(phi)).collect::<Vec<_>>();
+                    true_body.extend(ssa_body);
+                    output.push(SsaStmt::Loop(control_var, true_body, Vec::new()));
                 }
                 Stmt::ZeroLoop => { 
                     let new = self.new_var(self.ptr_offset);
